@@ -67,7 +67,9 @@
           <span class="rec-ring"></span>
           <svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 0 0 7 0v-5A3.5 3.5 0 0 0 12 3Z" fill="currentColor"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
-        <p class="rec-hint">Tap to record &amp; transcribe.<br>Tap a name below while recording to mark who's speaking.</p>
+        <p class="rec-hint" id="rec-hint">Tap to record &amp; transcribe.<br>Tap a name below while recording to mark who's speaking.</p>
+        <button class="chip" id="transcribe-toggle"></button>
+        <p class="rec-toggle-note" id="rec-toggle-note"></p>
       </div>
 
       <div class="rec-live hidden" id="rec-live">
