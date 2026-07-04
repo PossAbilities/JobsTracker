@@ -660,6 +660,29 @@ const rec = {
   discard: false,
 };
 
+// Live transcription toggle. Off = fully silent recording: iOS plays its
+// system "dictation ding" whenever speech recognition starts and web apps
+// cannot suppress it, so discreet recordings need transcription disabled.
+let transcribeOn = localStorage.getItem("tada-transcribe") !== "0";
+
+function renderTranscribeToggle() {
+  const btn = $("#transcribe-toggle");
+  btn.textContent = transcribeOn ? "🔤 Live transcription: On" : "🤫 Live transcription: Off";
+  btn.classList.toggle("active", transcribeOn);
+  $("#rec-toggle-note").textContent = transcribeOn
+    ? "iOS plays a short chime when transcription starts listening."
+    : "Silent start — audio only, no chime, no live transcript.";
+  $("#rec-hint").innerHTML = transcribeOn
+    ? "Tap to record &amp; transcribe.<br>Tap a name below while recording to mark who's speaking."
+    : "Tap to record quietly (no transcript).<br>You can type what was said when you save.";
+}
+
+$("#transcribe-toggle").addEventListener("click", () => {
+  transcribeOn = !transcribeOn;
+  localStorage.setItem("tada-transcribe", transcribeOn ? "1" : "0");
+  renderTranscribeToggle();
+});
+
 const recIdle = $("#rec-idle");
 const recLive = $("#rec-live");
 const recTimer = $("#rec-timer");
@@ -731,6 +754,7 @@ async function startRecording(auto = false) {
   // 3. UI
   recIdle.classList.add("hidden");
   recLive.classList.remove("hidden");
+  ltPlaceholder.textContent = transcribeOn ? "Listening…" : "Recording quietly — no live transcript 🤫";
   ltPlaceholder.classList.remove("hidden");
   renderSpeakerChips();
   renderLiveTranscript();
@@ -742,8 +766,9 @@ async function startRecording(auto = false) {
   // 4. Waveform
   startWaveform();
 
-  // 5. Live transcription (best effort — audio keeps recording regardless)
-  startRecognition();
+  // 5. Live transcription (best effort — audio keeps recording regardless).
+  // Skipped entirely when toggled off so iOS never plays its dictation chime.
+  if (transcribeOn) startRecognition();
 
   // Keep the screen awake while recording if the browser lets us.
   try {
@@ -1600,6 +1625,7 @@ $("#wipe-btn").addEventListener("click", () =>
 renderTiles();
 renderTodayStrip();
 renderSettings();
+renderTranscribeToggle();
 
 // Ask the browser not to evict our data under storage pressure.
 navigator.storage?.persist?.();

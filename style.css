@@ -322,6 +322,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   line-height: 1.5;
   max-width: 300px;
 }
+.rec-toggle-note {
+  margin: -14px 0 0;
+  color: var(--faint);
+  text-align: center;
+  font-size: 12.5px;
+  max-width: 280px;
+  line-height: 1.45;
+}
 
 .rec-live { display: flex; flex-direction: column; gap: 14px; }
 .rec-live.hidden { display: none; }
