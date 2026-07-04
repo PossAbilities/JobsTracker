@@ -1,5 +1,5 @@
 /* Ta-Da! service worker — offline-first app shell */
-const CACHE = "tada-v1";
+const CACHE = "tada-v2";
 const SHELL = [
   ".",
   "index.html",
