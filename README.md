@@ -22,6 +22,17 @@ Ta-Da! is a web app that installs like a native app — no App Store needed.
 
 > **First recording:** Safari will ask for microphone permission — tap Allow. If live transcription doesn't start, check *Settings → Apps → Safari → Microphone* and *Siri & Dictation* are enabled. Even if transcription is unavailable, the audio always records and saves.
 
+## Siri, the Action button & iOS Shortcuts
+
+The app supports deep links, so the Shortcuts app can log things hands-free:
+
+- `https://<user>.github.io/JobsTracker/?log=Made a cup of tea` — logs that button instantly (any text works; unknown text is logged as a note)
+- `https://<user>.github.io/JobsTracker/?tab=record` — opens straight on the Record tab
+
+In the **Shortcuts** app: New shortcut → **Open URL** → paste a link above → name it (the name becomes its "Hey Siri" phrase). Shortcuts can be assigned to the **Action button**, **Back Tap** (Settings → Accessibility → Touch → Back Tap), the lock screen, or home-screen icons.
+
+⚠️ One iOS quirk: URLs opened from Shortcuts open in **Safari**, and iOS keeps Safari's data separate from the installed home-screen app's data. If you use URL shortcuts, use Ta-Da! in Safari too (one diary), or stick to a simpler shortcut that just opens the installed app (**Open App → Ta-Da!**) and tap the button yourself.
+
 ## Tips
 
 - **Edit the quick buttons** with the pencil icon (top-right of the Log tab) — rename, re-icon, delete, or add your own.
