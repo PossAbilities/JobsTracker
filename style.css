@@ -646,6 +646,105 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .empty-state .big { font-size: 44px; display: block; margin-bottom: 12px; }
 
+/* ---------- stats ---------- */
+.stats-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.sc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sc-head h3 { margin: 0; font-size: 15.5px; font-weight: 700; }
+.sc-big {
+  margin: 0 0 6px;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.sc-unit { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.sc-facts { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+.sc-facts strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.sc-sections { margin-top: 4px; }
+.sec-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.sec-line strong { color: var(--amber); font-variant-numeric: tabular-nums; }
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.st-num { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.st-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
+.trend-chart { width: 100%; height: auto; display: block; }
+.trend-chart .ch-lab { fill: var(--faint); font-size: 10px; font-weight: 600; }
+.trend-chart .ch-lab.today { fill: var(--amber); font-weight: 800; }
+.trend-chart .ch-val { fill: var(--muted); font-size: 10px; font-weight: 700; }
+.trend-chart .ch-axis { stroke: rgba(255, 255, 255, 0.08); }
+
+.hbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+.hbar-row:last-child { margin-bottom: 2px; }
+.hb-label {
+  flex: 0 0 44%;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hb-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.hb-fill { height: 100%; background: var(--teal); border-radius: 5px; }
+.hb-count {
+  flex: none;
+  min-width: 20px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- settings ---------- */
 .section-label {
   font-size: 13px;
