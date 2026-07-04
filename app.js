@@ -85,6 +85,14 @@ const DEFAULT_TILES = [
   { id: "t8", emoji: "💩", label: "Cleaned the litter tray" },
   { id: "t9", emoji: "🫧", label: "Clothes in the washing machine" },
   { id: "t10", emoji: "🌀", label: "Clothes in the dryer" },
+  { id: "t11", emoji: "🧋", label: "Made a cold iced coffee" },
+  { id: "t12", emoji: "📮", label: "Went to the post office" },
+  { id: "t13", emoji: "🎒", label: "Took the kids to school" },
+  { id: "t14", emoji: "🏫", label: "Picked the kids up from school" },
+  { id: "t15", emoji: "🍝", label: "Cooked dinner" },
+  { id: "t16", emoji: "🥪", label: "Made lunch" },
+  { id: "t17", emoji: "⚽", label: "Took Corey to football" },
+  { id: "t18", emoji: "📦", label: "Picked up Sam's parcel" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -103,15 +111,16 @@ function loadJSON(key, fallback) {
 let tiles = loadJSON("tada-tiles", DEFAULT_TILES);
 let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
 
-// One-time migration: add the newer starter buttons to installs that
-// customised their tiles before these defaults existed.
-if (!localStorage.getItem("tada-tiles-v2")) {
+// One-time migrations: add newer starter buttons to installs that
+// customised their tiles before those defaults existed.
+for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10]]) {
+  if (localStorage.getItem(flag)) continue;
   const have = new Set(tiles.map((t) => t.label.toLowerCase()));
-  for (const t of DEFAULT_TILES.slice(6)) {
+  for (const t of DEFAULT_TILES.slice(start)) {
     if (!have.has(t.label.toLowerCase())) tiles.push(t);
   }
   if (localStorage.getItem("tada-tiles")) localStorage.setItem("tada-tiles", JSON.stringify(tiles));
-  localStorage.setItem("tada-tiles-v2", "1");
+  localStorage.setItem(flag, "1");
 }
 const saveTiles = () => localStorage.setItem("tada-tiles", JSON.stringify(tiles));
 const saveSpeakers = () => localStorage.setItem("tada-speakers", JSON.stringify(speakers));
@@ -271,7 +280,7 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "💩", "🫧", "🌀", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🍳", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
   openSheet(`
     <h3>${isNew ? "New quick button" : "Edit button"}</h3>
