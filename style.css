@@ -125,6 +125,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.tile-sec-label { margin: 22px 2px 10px; }
+.tile-area > .tile-sec-label:first-child { margin-top: 4px; }
+.add-grid { margin-top: 22px; }
 
 .tile {
   position: relative;
@@ -186,8 +189,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   place-items: center;
   cursor: pointer;
 }
-.tile-grid.editing .tile .tile-del { display: grid; }
-.tile-grid.editing .tile:not(.add-tile) { animation: wiggle 0.35s ease-in-out infinite alternate; }
+.tile-area.editing .tile .tile-del { display: grid; }
+.tile-area.editing .tile:not(.add-tile) { animation: wiggle 0.35s ease-in-out infinite alternate; }
 @keyframes wiggle {
   from { transform: rotate(-0.8deg); }
   to   { transform: rotate(0.8deg); }
@@ -796,6 +799,23 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
+}
+.sheet .field select {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 16px;
+  font-family: inherit;
+  padding: 13px 14px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%239ba0b4' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 18px;
 }
 .sheet .field input, .sheet .field textarea {
   width: 100%;

@@ -74,25 +74,32 @@ const deleteAudio = (id) => idb("audio", "readwrite", (s) => s.delete(id));
 const getAllEntries = () => idb("entries", "readonly", (s) => s.getAll());
 
 /* ---------------- settings (localStorage) ---------------- */
+const KNOWN_SECTIONS = ["Tidying up", "Laundry", "Kitchen", "Kids", "Pets", "Errands"];
 const DEFAULT_TILES = [
-  { id: "t1", emoji: "🧺", label: "Picked up her clothes" },
-  { id: "t2", emoji: "👕", label: "Put the washing away" },
-  { id: "t3", emoji: "🍽️", label: "Emptied the dishwasher" },
-  { id: "t4", emoji: "🗑️", label: "Took the bins out" },
-  { id: "t5", emoji: "🐕", label: "Walked the dog" },
-  { id: "t6", emoji: "💊", label: "Took my meds" },
-  { id: "t7", emoji: "☕", label: "Made a cup of tea" },
-  { id: "t8", emoji: "💩", label: "Cleaned the litter tray" },
-  { id: "t9", emoji: "🫧", label: "Clothes in the washing machine" },
-  { id: "t10", emoji: "🌀", label: "Clothes in the dryer" },
-  { id: "t11", emoji: "🧋", label: "Made a cold iced coffee" },
-  { id: "t12", emoji: "📮", label: "Went to the post office" },
-  { id: "t13", emoji: "🎒", label: "Took the kids to school" },
-  { id: "t14", emoji: "🏫", label: "Picked the kids up from school" },
-  { id: "t15", emoji: "🍝", label: "Cooked dinner" },
-  { id: "t16", emoji: "🥪", label: "Made lunch" },
-  { id: "t17", emoji: "⚽", label: "Took Corey to football" },
-  { id: "t18", emoji: "📦", label: "Picked up Sam's parcel" },
+  { id: "t1", emoji: "🧺", label: "Picked up her clothes", section: "Tidying up" },
+  { id: "t2", emoji: "👕", label: "Put the washing away", section: "Laundry" },
+  { id: "t3", emoji: "🍽️", label: "Emptied the dishwasher", section: "Kitchen" },
+  { id: "t4", emoji: "🗑️", label: "Took the bins out", section: "Errands" },
+  { id: "t5", emoji: "🐕", label: "Walked the dog", section: "Pets" },
+  { id: "t6", emoji: "💊", label: "Took my meds", section: "Other" },
+  { id: "t7", emoji: "☕", label: "Made a cup of tea", section: "Kitchen" },
+  { id: "t8", emoji: "💩", label: "Cleaned the litter tray", section: "Pets" },
+  { id: "t9", emoji: "🫧", label: "Clothes in the washing machine", section: "Laundry" },
+  { id: "t10", emoji: "🌀", label: "Clothes in the dryer", section: "Laundry" },
+  { id: "t11", emoji: "🧋", label: "Made a cold iced coffee", section: "Kitchen" },
+  { id: "t12", emoji: "📮", label: "Went to the post office", section: "Errands" },
+  { id: "t13", emoji: "🎒", label: "Took the kids to school", section: "Kids" },
+  { id: "t14", emoji: "🏫", label: "Picked the kids up from school", section: "Kids" },
+  { id: "t15", emoji: "🍝", label: "Cooked dinner", section: "Kitchen" },
+  { id: "t16", emoji: "🥪", label: "Made lunch", section: "Kitchen" },
+  { id: "t17", emoji: "⚽", label: "Took Corey to football", section: "Kids" },
+  { id: "t18", emoji: "📦", label: "Picked up Sam's parcel", section: "Errands" },
+  { id: "t19", emoji: "🚭", label: "Cleaned up her cigarettes", section: "Tidying up" },
+  { id: "t20", emoji: "🚬", label: "Picked cigarette packets off the floor", section: "Tidying up" },
+  { id: "t21", emoji: "🛋️", label: "Got the cushions out", section: "Tidying up" },
+  { id: "t22", emoji: "🛋️", label: "Put the cushions away", section: "Tidying up" },
+  { id: "t23", emoji: "🛏️", label: "Took the covers off the hideaway", section: "Tidying up" },
+  { id: "t24", emoji: "🛏️", label: "Put the covers back on the hideaway", section: "Tidying up" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -113,14 +120,27 @@ let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
 
 // One-time migrations: add newer starter buttons to installs that
 // customised their tiles before those defaults existed.
-for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10]]) {
+for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18]]) {
   if (localStorage.getItem(flag)) continue;
   const have = new Set(tiles.map((t) => t.label.toLowerCase()));
   for (const t of DEFAULT_TILES.slice(start)) {
-    if (!have.has(t.label.toLowerCase())) tiles.push(t);
+    if (!have.has(t.label.toLowerCase())) tiles.push({ ...t });
   }
   if (localStorage.getItem("tada-tiles")) localStorage.setItem("tada-tiles", JSON.stringify(tiles));
   localStorage.setItem(flag, "1");
+}
+
+// Backfill sections onto tiles saved before sections existed.
+{
+  const sectionByLabel = new Map(DEFAULT_TILES.map((t) => [t.label.toLowerCase(), t.section]));
+  let changed = false;
+  for (const t of tiles) {
+    if (!t.section) {
+      t.section = sectionByLabel.get(t.label.toLowerCase()) || "Other";
+      changed = true;
+    }
+  }
+  if (changed && localStorage.getItem("tada-tiles")) localStorage.setItem("tada-tiles", JSON.stringify(tiles));
 }
 const saveTiles = () => localStorage.setItem("tada-tiles", JSON.stringify(tiles));
 const saveSpeakers = () => localStorage.setItem("tada-speakers", JSON.stringify(speakers));
@@ -214,22 +234,41 @@ let editingTiles = false;
 
 $("#log-date").textContent = fmtLongDate(Date.now());
 
-function renderTiles() {
-  tileGrid.classList.toggle("editing", editingTiles);
-  tileGrid.innerHTML = tiles
-    .map(
-      (t) => `
+function sectionOrder() {
+  const present = [...new Set(tiles.map((t) => t.section || "Other"))];
+  const extras = present.filter((s) => !KNOWN_SECTIONS.includes(s) && s !== "Other");
+  return [
+    ...KNOWN_SECTIONS.filter((s) => present.includes(s)),
+    ...extras,
+    ...(present.includes("Other") ? ["Other"] : []),
+  ];
+}
+
+const tileHTML = (t) => `
     <button class="tile" data-id="${t.id}">
       <span class="tile-emoji">${esc(t.emoji)}</span>
       <span class="tile-label">${esc(t.label)}</span>
       <span class="tile-del" data-del="${t.id}" role="button" aria-label="Delete">✕</span>
-    </button>`
-    )
-    .join("") +
-    `<button class="tile add-tile" id="add-tile">
-      <span class="tile-emoji">＋</span>
-      <span>Add a button</span>
     </button>`;
+
+function renderTiles() {
+  tileGrid.classList.toggle("editing", editingTiles);
+  tileGrid.innerHTML =
+    sectionOrder()
+      .map(
+        (sec) => `
+    <h2 class="section-label tile-sec-label">${esc(sec)}</h2>
+    <div class="tile-grid">
+      ${tiles.filter((t) => (t.section || "Other") === sec).map(tileHTML).join("")}
+    </div>`
+      )
+      .join("") +
+    `<div class="tile-grid add-grid">
+      <button class="tile add-tile" id="add-tile">
+        <span class="tile-emoji">＋</span>
+        <span>Add a button</span>
+      </button>
+    </div>`;
 
   $("#add-tile").addEventListener("click", () => openTileSheet(null));
 
@@ -280,13 +319,23 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
+  const currentSection = tile?.section || "Other";
+  const sections = [...new Set([...KNOWN_SECTIONS, ...tiles.map((t) => t.section || "Other"), "Other"])];
   openSheet(`
     <h3>${isNew ? "New quick button" : "Edit button"}</h3>
     <div class="field">
       <label>What did you do?</label>
       <input id="tile-label-input" type="text" maxlength="60" placeholder="e.g. Hoovered the stairs" value="${esc(tile?.label || "")}">
+    </div>
+    <div class="field">
+      <label>Section</label>
+      <select id="tile-section-select">
+        ${sections.map((s) => `<option value="${esc(s)}" ${s === currentSection ? "selected" : ""}>${esc(s)}</option>`).join("")}
+        <option value="__new">＋ New section…</option>
+      </select>
+      <input id="tile-section-new" type="text" maxlength="24" placeholder="Name the new section" class="hidden" style="margin-top:8px">
     </div>
     <div class="field">
       <label>Icon</label>
@@ -305,15 +354,24 @@ function openTileSheet(tile) {
       $$("#emoji-strip button", sheetEl).forEach((x) => x.classList.toggle("sel", x === b));
     })
   );
+  const sectionSelect = $("#tile-section-select", sheetEl);
+  const sectionNew = $("#tile-section-new", sheetEl);
+  sectionSelect.addEventListener("change", () => {
+    sectionNew.classList.toggle("hidden", sectionSelect.value !== "__new");
+    if (sectionSelect.value === "__new") sectionNew.focus();
+  });
   $('[data-act="cancel"]', sheetEl).onclick = closeSheet;
   $('[data-act="save"]', sheetEl).onclick = () => {
     const label = $("#tile-label-input", sheetEl).value.trim();
     if (!label) return;
+    let section = sectionSelect.value;
+    if (section === "__new") section = sectionNew.value.trim() || "Other";
     if (isNew) {
-      tiles.push({ id: uid(), emoji: chosen, label });
+      tiles.push({ id: uid(), emoji: chosen, label, section });
     } else {
       tile.label = label;
       tile.emoji = chosen;
+      tile.section = section;
     }
     saveTiles();
     renderTiles();
@@ -1076,6 +1134,35 @@ renderSettings();
 
 // Ask the browser not to evict our data under storage pressure.
 navigator.storage?.persist?.();
+
+// Deep links for iOS Shortcuts / Siri / Action button:
+//   ?log=<button label or any text>  — logs it instantly
+//   ?tab=record|diary|settings       — opens on that tab
+{
+  const params = new URLSearchParams(location.search);
+  const logParam = params.get("log")?.trim();
+  const tabParam = params.get("tab");
+  if (logParam) {
+    const tile = tiles.find(
+      (t) => t.id === logParam || t.label.toLowerCase() === logParam.toLowerCase()
+    );
+    const entry = tile
+      ? { id: uid(), type: "task", ts: Date.now(), title: tile.label, emoji: tile.emoji }
+      : { id: uid(), type: "note", ts: Date.now(), title: logParam, emoji: "✏️" };
+    putEntry(entry).then(() => {
+      toast(tadaLine(entry.ts), {
+        undo: async () => {
+          await deleteEntry(entry.id);
+          renderTodayStrip();
+          toast("Undone");
+        },
+      });
+      renderTodayStrip();
+    });
+  }
+  if (tabParam) $(`.tab[data-tab="${CSS.escape(tabParam)}"]`)?.click();
+  if (logParam || tabParam) history.replaceState(null, "", location.pathname);
+}
 
 // Offline support
 if ("serviceWorker" in navigator) {
