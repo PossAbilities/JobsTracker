@@ -81,6 +81,10 @@ const DEFAULT_TILES = [
   { id: "t4", emoji: "🗑️", label: "Took the bins out" },
   { id: "t5", emoji: "🐕", label: "Walked the dog" },
   { id: "t6", emoji: "💊", label: "Took my meds" },
+  { id: "t7", emoji: "☕", label: "Made a cup of tea" },
+  { id: "t8", emoji: "💩", label: "Cleaned the litter tray" },
+  { id: "t9", emoji: "🫧", label: "Clothes in the washing machine" },
+  { id: "t10", emoji: "🌀", label: "Clothes in the dryer" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -98,6 +102,17 @@ function loadJSON(key, fallback) {
 }
 let tiles = loadJSON("tada-tiles", DEFAULT_TILES);
 let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
+
+// One-time migration: add the newer starter buttons to installs that
+// customised their tiles before these defaults existed.
+if (!localStorage.getItem("tada-tiles-v2")) {
+  const have = new Set(tiles.map((t) => t.label.toLowerCase()));
+  for (const t of DEFAULT_TILES.slice(6)) {
+    if (!have.has(t.label.toLowerCase())) tiles.push(t);
+  }
+  if (localStorage.getItem("tada-tiles")) localStorage.setItem("tada-tiles", JSON.stringify(tiles));
+  localStorage.setItem("tada-tiles-v2", "1");
+}
 const saveTiles = () => localStorage.setItem("tada-tiles", JSON.stringify(tiles));
 const saveSpeakers = () => localStorage.setItem("tada-speakers", JSON.stringify(speakers));
 const speakerColour = (id) => {
@@ -256,7 +271,7 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "🧹", "🛒", "📞", "🚗", "🧒", "🍳", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "💩", "🫧", "🌀", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🍳", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
   openSheet(`
     <h3>${isNew ? "New quick button" : "Edit button"}</h3>
