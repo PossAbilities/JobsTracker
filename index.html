@@ -116,6 +116,21 @@
     <div id="timeline"></div>
   </section>
 
+  <!-- ============ STATS TAB ============ -->
+  <section class="tab-panel" id="panel-stats">
+    <header class="page-head">
+      <div>
+        <h1>Stats</h1>
+        <p class="sub">Your day, summed up — and the bigger picture</p>
+      </div>
+    </header>
+    <div class="filter-row" id="stats-day-row">
+      <button class="chip active" data-day="0">Today</button>
+      <button class="chip" data-day="1">Yesterday</button>
+    </div>
+    <div id="stats-content"></div>
+  </section>
+
   <!-- ============ SETTINGS TAB ============ -->
   <section class="tab-panel" id="panel-settings">
     <header class="page-head">
@@ -168,6 +183,10 @@
   <button class="tab" data-tab="diary">
     <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     <span>Diary</span>
+  </button>
+  <button class="tab" data-tab="stats">
+    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>Stats</span>
   </button>
   <button class="tab" data-tab="settings">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>

@@ -240,6 +240,7 @@ $$(".tab").forEach((tab) => {
     if (name === "diary") renderDiary();
     if (name === "log") renderTodayStrip();
     if (name === "settings") renderSettings();
+    if (name === "stats") renderStats();
     window.scrollTo(0, 0);
   });
 });
@@ -1267,6 +1268,206 @@ async function shareText(text) {
   } catch {
     toast("Couldn't share on this device");
   }
+}
+
+/* ============================================================
+   STATS TAB — daily summary + trends
+   ============================================================ */
+const DAY_MS = 864e5;
+let statsDayOffset = 0;
+
+$$("#stats-day-row .chip").forEach((chip) =>
+  chip.addEventListener("click", () => {
+    statsDayOffset = Number(chip.dataset.day);
+    $$("#stats-day-row .chip").forEach((c) => c.classList.toggle("active", c === chip));
+    renderStats();
+  })
+);
+
+function sectionForEntry(e) {
+  if (e.type === "voice") return "Voice notes";
+  const tile = tiles.find((t) => t.label.toLowerCase() === (e.title || "").toLowerCase());
+  return tile ? tile.section || "Other" : "Notes & other";
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+async function renderStats() {
+  const all = (await getAllEntries()).sort((a, b) => a.ts - b.ts);
+  const el = $("#stats-content");
+  const dayStart = startOfToday() - statsDayOffset * DAY_MS;
+  const targetKey = dayKey(dayStart);
+  const dayEntries = all.filter((e) => dayKey(e.ts) === targetKey);
+
+  // ---- day summary numbers ----
+  const tasks = dayEntries.filter((e) => e.type === "task").length;
+  const voice = dayEntries.filter((e) => e.type === "voice");
+  const notes = dayEntries.filter((e) => e.type === "note").length;
+  const photos = dayEntries.reduce((n, e) => n + (e.photoIds?.length || 0), 0);
+  const voiceMs = voice.reduce((n, e) => n + (e.durationMs || 0), 0);
+  const first = dayEntries[0];
+  const last = dayEntries[dayEntries.length - 1];
+
+  const bySection = new Map();
+  for (const e of dayEntries) {
+    const s = sectionForEntry(e);
+    bySection.set(s, (bySection.get(s) || 0) + 1);
+  }
+  const sectionRows = [...bySection.entries()].sort((a, b) => b[1] - a[1]);
+
+  const typeBits = [];
+  if (tasks) typeBits.push(`✓ ${tasks} done`);
+  if (voice.length) typeBits.push(`🎙 ${voice.length} voice ${voice.length === 1 ? "note" : "notes"} (${fmtDur(voiceMs)})`);
+  if (notes) typeBits.push(`✏️ ${notes} ${notes === 1 ? "note" : "notes"}`);
+  if (photos) typeBits.push(`📷 ${photos} ${photos === 1 ? "photo" : "photos"}`);
+
+  const summaryCard = dayEntries.length
+    ? `
+    <div class="stats-card">
+      <div class="sc-head">
+        <h3>${statsDayOffset === 0 ? "Today" : "Yesterday"} · ${fmtLongDate(dayStart)}</h3>
+        <button class="day-share" id="share-summary">Share ↗</button>
+      </div>
+      <p class="sc-big">${dayEntries.length}<span class="sc-unit"> thing${dayEntries.length === 1 ? "" : "s"} on the record</span></p>
+      <p class="sc-facts">${typeBits.join(" · ")}</p>
+      <p class="sc-facts">
+        First: <strong>${fmtTime(first.ts)}</strong> — ${esc(first.title)}<br>
+        Last: <strong>${fmtTime(last.ts)}</strong> — ${esc(last.title)}
+      </p>
+      <div class="sc-sections">
+        ${sectionRows.map(([s, n]) => `<div class="sec-line"><span>${esc(s)}</span><strong>×${n}</strong></div>`).join("")}
+      </div>
+    </div>`
+    : `
+    <div class="stats-card">
+      <div class="sc-head"><h3>${statsDayOffset === 0 ? "Today" : "Yesterday"} · ${fmtLongDate(dayStart)}</h3></div>
+      <p class="sc-facts">Nothing on the record ${statsDayOffset === 0 ? "yet — the day's not over" : "that day"}.</p>
+    </div>`;
+
+  // ---- streak + week comparison ----
+  const daysWith = new Set(all.map((e) => dayKey(e.ts)));
+  let streak = 0;
+  let cursor = daysWith.has(dayKey(Date.now())) ? startOfToday() : startOfToday() - DAY_MS;
+  while (daysWith.has(dayKey(cursor))) {
+    streak++;
+    cursor -= DAY_MS;
+  }
+  const endTonight = startOfToday() + DAY_MS;
+  const wThis = all.filter((e) => e.ts >= endTonight - 7 * DAY_MS && e.ts < endTonight).length;
+  const wLast = all.filter((e) => e.ts >= endTonight - 14 * DAY_MS && e.ts < endTonight - 7 * DAY_MS).length;
+  const delta = wThis - wLast;
+  const deltaText = wLast === 0 ? (wThis ? "first week on record" : "quiet fortnight") : delta === 0 ? "same as last week" : `${delta > 0 ? "▲" : "▼"} ${Math.abs(delta)} vs last week`;
+
+  const tilesRow = `
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <span class="st-num">${streak}</span>
+        <span class="st-label">day streak ${streak >= 3 ? "🔥" : ""}</span>
+      </div>
+      <div class="stat-tile">
+        <span class="st-num">${wThis}</span>
+        <span class="st-label">this week · ${esc(deltaText)}</span>
+      </div>
+    </div>`;
+
+  // ---- 14-day trend ----
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const t = startOfToday() - i * DAY_MS;
+    const k = dayKey(t);
+    days.push({ t, count: all.filter((e) => dayKey(e.ts) === k).length });
+  }
+  const trendCard = `
+    <div class="stats-card">
+      <div class="sc-head"><h3>Last 14 days</h3></div>
+      ${barChartSVG(days)}
+    </div>`;
+
+  // ---- top tasks, last 30 days ----
+  const cutoff = Date.now() - 30 * DAY_MS;
+  const counts = new Map();
+  for (const e of all) {
+    if (e.ts >= cutoff && e.type === "task") counts.set(e.title, (counts.get(e.title) || 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxTop = top[0]?.[1] || 1;
+  const topCard = top.length
+    ? `
+    <div class="stats-card">
+      <div class="sc-head"><h3>Most logged · last 30 days</h3></div>
+      ${top
+        .map(
+          ([title, n]) => `
+        <div class="hbar-row">
+          <span class="hb-label">${esc(title)}</span>
+          <div class="hb-track"><div class="hb-fill" style="width:${Math.max(6, (n / maxTop) * 100)}%"></div></div>
+          <span class="hb-count">${n}</span>
+        </div>`
+        )
+        .join("")}
+    </div>`
+    : "";
+
+  el.innerHTML = summaryCard + tilesRow + trendCard + topCard;
+
+  $("#share-summary")?.addEventListener("click", () => shareDaySummary(dayStart, dayEntries, sectionRows, typeBits));
+  $$(".trend-chart [data-i]", el).forEach((bar) =>
+    bar.addEventListener("click", () => {
+      const d = days[Number(bar.dataset.i)];
+      toast(`${fmtLongDate(d.t)} — ${d.count} logged`);
+    })
+  );
+}
+
+function barChartSVG(days) {
+  const W = 340, H = 120, labelH = 16, r = 4;
+  const max = Math.max(1, ...days.map((d) => d.count));
+  const bw = W / days.length;
+  const maxIdx = days.reduce((mi, d, i) => (d.count > days[mi].count ? i : mi), 0);
+  let bars = "", labels = "", values = "";
+  days.forEach((d, i) => {
+    const x = i * bw + bw * 0.18;
+    const w = bw * 0.64;
+    const cx = i * bw + bw / 2;
+    const isToday = i === days.length - 1;
+    if (d.count === 0) {
+      bars += `<rect data-i="${i}" x="${x}" y="${H - labelH - 3}" width="${w}" height="3" rx="1.5" fill="var(--surface-3)"/>`;
+    } else {
+      const h = Math.max(8, (d.count / max) * (H - labelH - 22));
+      const y = H - labelH - h;
+      bars += `<path data-i="${i}" d="M${x},${y + r} a${r},${r} 0 0 1 ${r},-${r} h${w - 2 * r} a${r},${r} 0 0 1 ${r},${r} v${h - r} h${-w} Z" fill="var(--amber)"/>`;
+    }
+    const wd = new Date(d.t).toLocaleDateString(LOCALE, { weekday: "narrow" });
+    labels += `<text x="${cx}" y="${H - 3}" text-anchor="middle" class="ch-lab ${isToday ? "today" : ""}">${wd}</text>`;
+    if (d.count && (i === maxIdx || isToday)) {
+      const h = Math.max(8, (d.count / max) * (H - labelH - 22));
+      values += `<text x="${cx}" y="${H - labelH - h - 5}" text-anchor="middle" class="ch-val">${d.count}</text>`;
+    }
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-chart" role="img" aria-label="Things logged per day over the last 14 days">
+    <line x1="0" y1="${H - labelH + 0.5}" x2="${W}" y2="${H - labelH + 0.5}" class="ch-axis"/>
+    ${bars}${labels}${values}
+  </svg>`;
+}
+
+function shareDaySummary(dayStart, dayEntries, sectionRows, typeBits) {
+  if (!dayEntries.length) return;
+  const first = dayEntries[0];
+  const last = dayEntries[dayEntries.length - 1];
+  const text =
+    `🧾 Ta-Da! daily summary — ${fmtFullDate(dayStart)}\n\n` +
+    `${dayEntries.length} thing${dayEntries.length === 1 ? "" : "s"} on the record\n` +
+    (typeBits.length ? typeBits.join(" · ") + "\n" : "") +
+    `First: ${fmtTime(first.ts)} — ${first.title}\n` +
+    `Last: ${fmtTime(last.ts)} — ${last.title}\n\n` +
+    (sectionRows.length ? `By section: ${sectionRows.map(([s, n]) => `${s} ×${n}`).join(" · ")}\n\n` : "") +
+    `Full receipts:\n` +
+    dayEntries.map((e) => entryToText(e)).join("\n");
+  shareText(text);
 }
 
 /* ============================================================
