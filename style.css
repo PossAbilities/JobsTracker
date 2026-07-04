@@ -227,6 +227,11 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .quick-note button svg { width: 24px; height: 24px; }
 .quick-note button:active { transform: scale(0.94); }
+.quick-note #paste-log-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 21px;
+}
 
 /* ---------- record tab ---------- */
 .rec-stage { margin-top: 8px; }
