@@ -129,6 +129,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.tile-search { margin-bottom: 4px; }
 .tile-sec-label { margin: 22px 2px 10px; }
 .tile-area > .tile-sec-label:first-child { margin-top: 4px; }
 .add-grid { margin-top: 22px; }

@@ -113,6 +113,11 @@ const DEFAULT_TILES = [
   { id: "t29", emoji: "🧹", label: "Hoovered the games room", section: "Cleaning" },
   { id: "t30", emoji: "🪶", label: "Dusted the games room", section: "Cleaning" },
   { id: "t31", emoji: "🛁", label: "Cleaned the upstairs bathroom", section: "Cleaning" },
+  { id: "t32", emoji: "🧦", label: "Put the dry laundry away", section: "Laundry" },
+  { id: "t33", emoji: "👔", label: "Ironed the laundry", section: "Laundry" },
+  { id: "t34", emoji: "🥣", label: "Filled up the dishwasher", section: "Kitchen" },
+  { id: "t35", emoji: "🧽", label: "Washed the dishes in the sink", section: "Kitchen" },
+  { id: "t36", emoji: "🍟", label: "Cleaned the Actifryer after Sam's cooking", section: "Kitchen" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -133,7 +138,7 @@ let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
 
 // One-time migrations: add newer starter buttons to installs that
 // customised their tiles before those defaults existed.
-for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18], ["tada-tiles-v5", 24]]) {
+for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18], ["tada-tiles-v5", 24], ["tada-tiles-v6", 31]]) {
   if (localStorage.getItem(flag)) continue;
   const have = new Set(tiles.map((t) => t.label.toLowerCase()));
   for (const t of DEFAULT_TILES.slice(start)) {
@@ -257,6 +262,8 @@ function sectionOrder() {
   ];
 }
 
+let tileSearch = "";
+
 const tileHTML = (t) => `
     <button class="tile" data-id="${t.id}">
       <span class="tile-emoji">${esc(t.emoji)}</span>
@@ -266,16 +273,24 @@ const tileHTML = (t) => `
 
 function renderTiles() {
   tileGrid.classList.toggle("editing", editingTiles);
+  const q = tileSearch.toLowerCase();
+  const visible = q ? tiles.filter((t) => t.label.toLowerCase().includes(q)) : tiles;
+  const sections = sectionOrder().filter((sec) =>
+    visible.some((t) => (t.section || "Other") === sec)
+  );
   tileGrid.innerHTML =
-    sectionOrder()
+    sections
       .map(
         (sec) => `
     <h2 class="section-label tile-sec-label">${esc(sec)}</h2>
     <div class="tile-grid">
-      ${tiles.filter((t) => (t.section || "Other") === sec).map(tileHTML).join("")}
+      ${visible.filter((t) => (t.section || "Other") === sec).map(tileHTML).join("")}
     </div>`
       )
       .join("") +
+    (q && !visible.length
+      ? `<div class="empty-state">Nothing matches “${esc(tileSearch)}” — you can still log it as a note below 👇</div>`
+      : "") +
     `<div class="tile-grid add-grid">
       <button class="tile add-tile" id="add-tile">
         <span class="tile-emoji">＋</span>
@@ -332,7 +347,7 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "👔", "🥣", "🍟", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
   const currentSection = tile?.section || "Other";
   const sections = [...new Set([...KNOWN_SECTIONS, ...tiles.map((t) => t.section || "Other"), "Other"])];
@@ -392,6 +407,11 @@ function openTileSheet(tile) {
   };
   setTimeout(() => $("#tile-label-input", sheetEl).focus(), 250);
 }
+
+$("#tile-search").addEventListener("input", (e) => {
+  tileSearch = e.target.value.trim();
+  renderTiles();
+});
 
 $("#edit-tiles-btn").addEventListener("click", () => {
   editingTiles = !editingTiles;
