@@ -7,6 +7,7 @@ Sick of "you never did X" / "I definitely told you Y"? Ta-Da! is built for exact
 - **⚡ One-tap logging** — big customisable buttons ("Picked up her clothes", "Put the washing away"…). Tap it, and it's on the record with the exact date and time. Undo if you fat-finger it.
 - **🎙️ Voice notes with live transcription** — push to record, like Otter. It transcribes as you talk (using your iPhone's built-in speech recognition), and you tap a name chip — **Me** / **Wife** — to label who's speaking. Every line of the transcript is stamped with the speaker and the time.
 - **🗂️ The diary** — everything grouped by day, searchable, with audio playback. "Today", "Yesterday", and back through time.
+- **📷 Photo evidence** — snap a photo as you log it (camera button on the Log tab), or add photos to any existing entry later from its ⋯ menu. Tap a thumbnail to view full-screen.
 - **🧾 Receipts on demand** — share any day (or single entry) as a tidy text summary: *"✓ 07:42 — Took the bins out"*. Case closed.
 - **🔒 Private by design** — everything (entries, audio, transcripts) is stored only on your phone. Nothing is uploaded anywhere. Works offline.
 

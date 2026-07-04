@@ -227,10 +227,50 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .quick-note button svg { width: 24px; height: 24px; }
 .quick-note button:active { transform: scale(0.94); }
-.quick-note #paste-log-btn {
+.quick-note #paste-log-btn,
+.quick-note #photo-btn {
   background: var(--surface);
   border: 1px solid var(--line);
   font-size: 21px;
+}
+
+/* ---------- photos ---------- */
+.e-photos {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.e-photos img {
+  width: 74px;
+  height: 74px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px;
+  animation: fade-in 0.15s ease;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 75vh;
+  border-radius: 14px;
+  object-fit: contain;
+}
+.lb-actions {
+  display: flex;
+  gap: 12px;
 }
 
 /* ---------- record tab ---------- */
