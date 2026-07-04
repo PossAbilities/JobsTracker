@@ -395,6 +395,50 @@ async function renderTodayStrip() {
     : "Nothing logged yet today — let's fix that";
 }
 
+/* ---- voice/dictation-friendly logging ---- */
+// "Can you log that I've just done the dishes." -> "Done the dishes"
+function cleanSpoken(text) {
+  let s = String(text || "").trim();
+  const prefixes =
+    /^(hey\s+)?(siri[,!.\s]+)?(can you |could you |please |ta[- ]?da[,!.\s]+)?(log|note|record|add)( that| this| it)?[,:\s]+/i;
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(prefixes, "").replace(/^(i've just |i have just |i just |i've |i have )/i, "");
+  } while (s !== prev && s);
+  s = s.replace(/[.!?\s]+$/, "").trim();
+  return s ? s[0].toUpperCase() + s.slice(1) : "";
+}
+
+// Match spoken text to a quick button, tolerantly.
+function matchTile(text) {
+  const q = text.toLowerCase().trim();
+  if (!q) return null;
+  return (
+    tiles.find((t) => t.label.toLowerCase() === q) ||
+    tiles.find((t) => q.includes(t.label.toLowerCase()) || t.label.toLowerCase().includes(q)) ||
+    null
+  );
+}
+
+// Log any text: as its matching button if one fits, otherwise as a note.
+async function logText(text) {
+  const tile = matchTile(text);
+  const entry = tile
+    ? { id: uid(), type: "task", ts: Date.now(), title: tile.label, emoji: tile.emoji }
+    : { id: uid(), type: "note", ts: Date.now(), title: text, emoji: "✏️" };
+  await putEntry(entry);
+  toast(tadaLine(entry.ts), {
+    undo: async () => {
+      await deleteEntry(entry.id);
+      renderTodayStrip();
+      toast("Undone");
+    },
+  });
+  renderTodayStrip();
+  return entry;
+}
+
 /* quick free-text note */
 const noteInput = $("#note-input");
 async function logNote() {
@@ -416,6 +460,21 @@ async function logNote() {
 $("#note-log-btn").addEventListener("click", logNote);
 noteInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") logNote();
+});
+
+// Log whatever a Shortcut left on the clipboard (dictated text) with one tap.
+$("#paste-log-btn").addEventListener("click", async () => {
+  try {
+    const raw = await navigator.clipboard.readText();
+    const text = cleanSpoken(raw);
+    if (!text) {
+      toast("Nothing on the clipboard to log");
+      return;
+    }
+    await logText(text);
+  } catch {
+    toast("Couldn't read the clipboard");
+  }
 });
 
 /* ============================================================
@@ -469,7 +528,8 @@ function showRecWarning(msg) {
   recWarn.classList.remove("hidden");
 }
 
-async function startRecording() {
+async function startRecording(auto = false) {
+  if (rec.recorder && rec.recorder.state === "recording") return;
   rec.discard = false;
   rec.chunks = [];
   rec.segments = [];
@@ -481,7 +541,9 @@ async function startRecording() {
   try {
     rec.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    toast("Microphone blocked — allow mic access in Settings ▸ Safari 🎙️");
+    // Auto-start (from a ?record=1 shortcut) can be blocked because iOS wants
+    // a real tap before opening the mic — the big red button is one tap away.
+    toast(auto ? "Tap the red button to start recording 🎙️" : "Microphone blocked — allow mic access in Settings ▸ Safari 🎙️");
     return;
   }
 
@@ -745,7 +807,7 @@ function openSaveSheet(blob, durationMs, segments, startTs) {
   };
 }
 
-$("#rec-start-btn").addEventListener("click", startRecording);
+$("#rec-start-btn").addEventListener("click", () => startRecording());
 $("#rec-stop-btn").addEventListener("click", () => stopRecording(false));
 $("#rec-cancel-btn").addEventListener("click", () =>
   confirmSheet("Discard this recording?", "It won't be saved anywhere.", "Discard", () => stopRecording(true))
@@ -1136,32 +1198,24 @@ renderSettings();
 navigator.storage?.persist?.();
 
 // Deep links for iOS Shortcuts / Siri / Action button:
-//   ?log=<button label or any text>  — logs it instantly
-//   ?tab=record|diary|settings       — opens on that tab
+//   ?log=<anything you said or typed> — logs it instantly (matches a button if one fits)
+//   ?record=1                         — jumps to the recorder and starts recording
+//   ?tab=record|diary|settings        — opens on that tab
 {
   const params = new URLSearchParams(location.search);
   const logParam = params.get("log")?.trim();
   const tabParam = params.get("tab");
+  const recordParam = params.get("record");
   if (logParam) {
-    const tile = tiles.find(
-      (t) => t.id === logParam || t.label.toLowerCase() === logParam.toLowerCase()
-    );
-    const entry = tile
-      ? { id: uid(), type: "task", ts: Date.now(), title: tile.label, emoji: tile.emoji }
-      : { id: uid(), type: "note", ts: Date.now(), title: logParam, emoji: "✏️" };
-    putEntry(entry).then(() => {
-      toast(tadaLine(entry.ts), {
-        undo: async () => {
-          await deleteEntry(entry.id);
-          renderTodayStrip();
-          toast("Undone");
-        },
-      });
-      renderTodayStrip();
-    });
+    const byId = tiles.find((t) => t.id === logParam);
+    logText(byId ? byId.label : cleanSpoken(logParam) || logParam);
   }
   if (tabParam) $(`.tab[data-tab="${CSS.escape(tabParam)}"]`)?.click();
-  if (logParam || tabParam) history.replaceState(null, "", location.pathname);
+  if (recordParam) {
+    $('.tab[data-tab="record"]')?.click();
+    startRecording(true);
+  }
+  if (logParam || tabParam || recordParam) history.replaceState(null, "", location.pathname);
 }
 
 // Offline support

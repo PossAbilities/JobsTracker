@@ -24,14 +24,21 @@ Ta-Da! is a web app that installs like a native app — no App Store needed.
 
 ## Siri, the Action button & iOS Shortcuts
 
-The app supports deep links, so the Shortcuts app can log things hands-free:
+The app supports deep links and understands dictated speech, so the Shortcuts app can drive it hands-free:
 
-- `https://<user>.github.io/JobsTracker/?log=Made a cup of tea` — logs that button instantly (any text works; unknown text is logged as a note)
-- `https://<user>.github.io/JobsTracker/?tab=record` — opens straight on the Record tab
+- `https://<user>.github.io/JobsTracker/?log=<anything>` — logs it instantly. Spoken filler is stripped ("can you log that I've just done the dishes" → "Done the dishes") and text that matches a quick button logs as that button.
+- `https://<user>.github.io/JobsTracker/?record=1` — jumps straight into recording (evidence mode). If iOS insists on a tap first, the big red button is one tap away.
+- `https://<user>.github.io/JobsTracker/?tab=record|diary|settings` — opens on that tab.
 
-In the **Shortcuts** app: New shortcut → **Open URL** → paste a link above → name it (the name becomes its "Hey Siri" phrase). Shortcuts can be assigned to the **Action button**, **Back Tap** (Settings → Accessibility → Touch → Back Tap), the lock screen, or home-screen icons.
+**Voice-log shortcut:** New shortcut → **Dictate Text** → **Open URL** with `...?log=` followed by the *Dictated Text* variable. Name it "Log it" — then the Action button / Back Tap / "Hey Siri, log it" lets you speak an entry.
 
-⚠️ One iOS quirk: URLs opened from Shortcuts open in **Safari**, and iOS keeps Safari's data separate from the installed home-screen app's data. If you use URL shortcuts, use Ta-Da! in Safari too (one diary), or stick to a simpler shortcut that just opens the installed app (**Open App → Ta-Da!**) and tap the button yourself.
+**Evidence shortcut:** New shortcut → **Open URL** → `...?record=1`.
+
+**One button for both:** New shortcut → **Choose from Menu** ("Log something" / "Record conversation") → put the recipes above in the two branches → assign to the Action button.
+
+⚠️ One iOS quirk: URLs opened from Shortcuts open in **Safari**, and iOS keeps Safari's data separate from the installed home-screen app's data. Either use Ta-Da! in Safari as your main copy (fully automatic), or keep the installed app and use this variant instead: shortcut = **Dictate Text → Copy to Clipboard → Open App (Ta-Da!)**, then tap the **📋 button** on the Log tab — it reads the clipboard, cleans it up and logs it into the installed app.
+
+Apple Watch: watchOS can't open web links, so true watch logging needs a native app — not possible with this web app.
 
 ## Tips
 
