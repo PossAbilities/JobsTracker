@@ -39,6 +39,7 @@
 
     <div class="quick-note">
       <input type="text" id="note-input" placeholder="Log anything… e.g. “rang the plumber”" enterkeyhint="done" autocomplete="off">
+      <button id="photo-btn" aria-label="Log a photo" title="Snap or pick a photo">📷</button>
       <button id="paste-log-btn" aria-label="Log what's on the clipboard" title="Log what's on the clipboard">📋</button>
       <button id="note-log-btn" aria-label="Log note">
         <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -168,6 +169,16 @@
     <span>Settings</span>
   </button>
 </nav>
+
+<!-- ============ PHOTO INPUT + LIGHTBOX ============ -->
+<input type="file" id="photo-input" accept="image/*" hidden>
+<div class="lightbox hidden" id="lightbox">
+  <img id="lightbox-img" alt="Photo">
+  <div class="lb-actions">
+    <button class="btn ghost" id="lb-close">Close</button>
+    <button class="btn danger-solid" id="lb-delete">Delete photo</button>
+  </div>
+</div>
 
 <!-- ============ TOAST ============ -->
 <div class="toast" id="toast">

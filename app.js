@@ -40,7 +40,7 @@ let dbPromise = null;
 function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("entries")) {
@@ -48,6 +48,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains("audio")) {
         db.createObjectStore("audio", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("photos")) {
+        db.createObjectStore("photos", { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -71,6 +74,9 @@ const deleteEntry = (id) => idb("entries", "readwrite", (s) => s.delete(id));
 const putAudio = (a) => idb("audio", "readwrite", (s) => s.put(a));
 const getAudio = (id) => idb("audio", "readonly", (s) => s.get(id));
 const deleteAudio = (id) => idb("audio", "readwrite", (s) => s.delete(id));
+const putPhoto = (p) => idb("photos", "readwrite", (s) => s.put(p));
+const getPhoto = (id) => idb("photos", "readonly", (s) => s.get(id));
+const deletePhoto = (id) => idb("photos", "readwrite", (s) => s.delete(id));
 const getAllEntries = () => idb("entries", "readonly", (s) => s.getAll());
 
 /* ---------------- settings (localStorage) ---------------- */
@@ -460,6 +466,136 @@ async function logNote() {
 $("#note-log-btn").addEventListener("click", logNote);
 noteInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") logNote();
+});
+
+/* ---- photo evidence ---- */
+let photoTargetEntryId = null; // entry to attach to; null = new photo entry
+const photoURLCache = new Map();
+
+async function photoURL(id) {
+  if (photoURLCache.has(id)) return photoURLCache.get(id);
+  const rec = await getPhoto(id);
+  if (!rec) return "";
+  const url = URL.createObjectURL(rec.blob);
+  photoURLCache.set(id, url);
+  return url;
+}
+
+// Shrink big camera shots so the diary doesn't eat the phone's storage.
+async function shrinkImage(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bmp.width * scale));
+    canvas.height = Math.max(1, Math.round(bmp.height * scale));
+    canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+    return blob && blob.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
+$("#photo-btn").addEventListener("click", () => {
+  photoTargetEntryId = null;
+  $("#photo-input").click();
+});
+
+$("#photo-input").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";
+  const target = photoTargetEntryId;
+  photoTargetEntryId = null;
+  if (!file) return;
+  const blob = await shrinkImage(file);
+  const photoId = uid();
+  await putPhoto({ id: photoId, blob });
+  if (target) {
+    const all = await getAllEntries();
+    const e = all.find((x) => x.id === target);
+    if (!e) {
+      await deletePhoto(photoId);
+      return;
+    }
+    e.photoIds = [...(e.photoIds || []), photoId];
+    await putEntry(e);
+    renderDiary();
+    toast("Photo attached 📷");
+  } else {
+    openPhotoCaptionSheet(photoId);
+  }
+});
+
+async function openPhotoCaptionSheet(photoId) {
+  const url = await photoURL(photoId);
+  openSheet(`
+    <h3>Photo evidence</h3>
+    <img src="${url}" alt="Photo" style="width:100%;max-height:40vh;object-fit:contain;border-radius:14px;background:var(--surface-2)">
+    <div class="field" style="margin-top:14px">
+      <label>What's this evidence of?</label>
+      <input id="photo-caption" type="text" maxlength="80" placeholder="e.g. Cushions, officially away">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="cancel">Discard</button>
+      <button class="btn primary" data-act="save">Save to diary</button>
+    </div>`);
+  $('[data-act="cancel"]', sheetEl).onclick = async () => {
+    await deletePhoto(photoId);
+    closeSheet();
+  };
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const caption = $("#photo-caption", sheetEl).value.trim();
+    const entry = {
+      id: uid(),
+      type: "note",
+      ts: Date.now(),
+      title: caption || "Photo evidence",
+      emoji: "📷",
+      photoIds: [photoId],
+    };
+    await putEntry(entry);
+    closeSheet();
+    toast(tadaLine(entry.ts));
+    renderTodayStrip();
+  };
+  setTimeout(() => $("#photo-caption", sheetEl)?.focus(), 250);
+}
+
+/* ---- lightbox ---- */
+const lightbox = $("#lightbox");
+let lightboxCtx = null; // {entryId, photoId}
+
+async function openLightbox(entryId, photoId) {
+  $("#lightbox-img").src = await photoURL(photoId);
+  lightboxCtx = { entryId, photoId };
+  lightbox.classList.remove("hidden");
+}
+function closeLightbox() {
+  lightbox.classList.add("hidden");
+  lightboxCtx = null;
+}
+$("#lb-close").addEventListener("click", closeLightbox);
+lightbox.addEventListener("click", (e) => {
+  if (e.target === lightbox) closeLightbox();
+});
+$("#lb-delete").addEventListener("click", () => {
+  const ctx = lightboxCtx;
+  if (!ctx) return;
+  closeLightbox();
+  confirmSheet("Delete this photo?", "The diary entry stays — just the photo goes.", "Delete", async () => {
+    const all = await getAllEntries();
+    const e = all.find((x) => x.id === ctx.entryId);
+    if (e) {
+      e.photoIds = (e.photoIds || []).filter((p) => p !== ctx.photoId);
+      await putEntry(e);
+    }
+    await deletePhoto(ctx.photoId);
+    photoURLCache.delete(ctx.photoId);
+    renderDiary();
+    toast("Photo deleted");
+  });
 });
 
 // Log whatever a Shortcut left on the clipboard (dictated text) with one tap.
@@ -902,6 +1038,10 @@ async function renderDiary() {
   $$(".ap-play", timeline).forEach((b) =>
     b.addEventListener("click", () => togglePlay(b.dataset.audio, b))
   );
+  $$("img[data-photo]", timeline).forEach((img) => {
+    photoURL(img.dataset.photo).then((url) => (img.src = url));
+    img.addEventListener("click", () => openLightbox(img.dataset.entry, img.dataset.photo));
+  });
 }
 
 function renderEntry(e) {
@@ -933,6 +1073,11 @@ function renderEntry(e) {
       <button class="ap-play" data-audio="${e.audioId}" aria-label="Play">▶</button>
       <div class="ap-track"><div class="ap-fill"></div></div>
       <span class="ap-time">${fmtDur(e.durationMs || 0)}</span>
+    </div>`;
+  }
+  if (e.photoIds?.length) {
+    extra += `<div class="e-photos">
+      ${e.photoIds.map((p) => `<img data-photo="${p}" data-entry="${e.id}" alt="Photo" loading="lazy">`).join("")}
     </div>`;
   }
 
@@ -1004,23 +1149,54 @@ async function openEntryMenu(id) {
     <h3>${esc(e.title)}</h3>
     <p class="sheet-note">${fmtFullDate(e.ts)} at ${fmtTime(e.ts)}</p>
     <div class="settings-card">
+      <button class="settings-row" data-act="photo"><span>📷 Add a photo</span><span class="chev">›</span></button>
       <button class="settings-row" data-act="share"><span>↗ Share this entry</span><span class="chev">›</span></button>
       <button class="settings-row danger" data-act="delete"><span>🗑 Delete entry</span><span class="chev">›</span></button>
     </div>`);
-  $('[data-act="share"]', sheetEl).onclick = () => {
+  $('[data-act="photo"]', sheetEl).onclick = () => {
     closeSheet();
-    shareText(entryToText(e, true));
+    photoTargetEntryId = e.id;
+    $("#photo-input").click();
+  };
+  $('[data-act="share"]', sheetEl).onclick = async () => {
+    closeSheet();
+    await shareEntry(e);
   };
   $('[data-act="delete"]', sheetEl).onclick = () => {
     closeSheet();
-    confirmSheet("Delete this entry?", "It'll be gone from the record for good (audio too).", "Delete", async () => {
+    confirmSheet("Delete this entry?", "It'll be gone from the record for good (audio and photos too).", "Delete", async () => {
       await deleteEntry(e.id);
       if (e.audioId) await deleteAudio(e.audioId);
+      for (const pid of e.photoIds || []) {
+        await deletePhoto(pid);
+        photoURLCache.delete(pid);
+      }
       renderDiary();
       renderTodayStrip();
       toast("Entry deleted");
     });
   };
+}
+
+// Share an entry as text, with its photos attached where the share sheet allows.
+async function shareEntry(e) {
+  const text = entryToText(e, true);
+  if (e.photoIds?.length && navigator.share) {
+    const files = [];
+    for (const pid of e.photoIds) {
+      const rec = await getPhoto(pid);
+      if (rec) files.push(new File([rec.blob], `tada-photo-${pid}.jpg`, { type: rec.blob.type || "image/jpeg" }));
+    }
+    if (files.length && navigator.canShare?.({ files, text })) {
+      try {
+        await navigator.share({ files, text });
+        return;
+      } catch {
+        /* cancelled or unsupported combo — fall back to text */
+      }
+    }
+  }
+  shareText(text);
 }
 
 /* ---- sharing ---- */
@@ -1032,6 +1208,9 @@ function entryToText(e, withDate = false) {
   if (e.detail) s += `\n   ${e.detail}`;
   for (const seg of e.transcript || []) {
     s += `\n   ${speakerName(seg.speakerId)} [${fmtClock(seg.t)}]: “${seg.text}”`;
+  }
+  if (e.photoIds?.length) {
+    s += `\n   📷 ${e.photoIds.length} photo${e.photoIds.length === 1 ? "" : "s"} attached`;
   }
   return s;
 }
@@ -1122,7 +1301,7 @@ $("#export-json-btn").addEventListener("click", async () => {
     app: "tada",
     version: 1,
     exportedAt: new Date().toISOString(),
-    note: "Audio recordings are not included in this backup — they stay on the device.",
+    note: "Audio recordings and photos are not included in this backup — they stay on the device.",
     tiles,
     speakers,
     entries,
