@@ -80,7 +80,7 @@ const deletePhoto = (id) => idb("photos", "readwrite", (s) => s.delete(id));
 const getAllEntries = () => idb("entries", "readonly", (s) => s.getAll());
 
 /* ---------------- settings (localStorage) ---------------- */
-const KNOWN_SECTIONS = ["Tidying up", "Laundry", "Kitchen", "Kids", "Pets", "Errands"];
+const KNOWN_SECTIONS = ["Tidying up", "Cleaning", "Laundry", "Kitchen", "Kids", "Pets", "Errands"];
 const DEFAULT_TILES = [
   { id: "t1", emoji: "🧺", label: "Picked up her clothes", section: "Tidying up" },
   { id: "t2", emoji: "👕", label: "Put the washing away", section: "Laundry" },
@@ -106,6 +106,13 @@ const DEFAULT_TILES = [
   { id: "t22", emoji: "🛋️", label: "Put the cushions away", section: "Tidying up" },
   { id: "t23", emoji: "🛏️", label: "Took the covers off the hideaway", section: "Tidying up" },
   { id: "t24", emoji: "🛏️", label: "Put the covers back on the hideaway", section: "Tidying up" },
+  { id: "t25", emoji: "🧹", label: "Hoovered the office", section: "Cleaning" },
+  { id: "t26", emoji: "🪶", label: "Dusted the office", section: "Cleaning" },
+  { id: "t27", emoji: "🧹", label: "Hoovered the living room", section: "Cleaning" },
+  { id: "t28", emoji: "🪶", label: "Dusted the living room", section: "Cleaning" },
+  { id: "t29", emoji: "🧹", label: "Hoovered the games room", section: "Cleaning" },
+  { id: "t30", emoji: "🪶", label: "Dusted the games room", section: "Cleaning" },
+  { id: "t31", emoji: "🛁", label: "Cleaned the upstairs bathroom", section: "Cleaning" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -126,7 +133,7 @@ let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
 
 // One-time migrations: add newer starter buttons to installs that
 // customised their tiles before those defaults existed.
-for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18]]) {
+for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18], ["tada-tiles-v5", 24]]) {
   if (localStorage.getItem(flag)) continue;
   const have = new Set(tiles.map((t) => t.label.toLowerCase()));
   for (const t of DEFAULT_TILES.slice(start)) {
@@ -325,7 +332,7 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "🧹", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
   const currentSection = tile?.section || "Other";
   const sections = [...new Set([...KNOWN_SECTIONS, ...tiles.map((t) => t.section || "Other"), "Other"])];
