@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 22; // keep in step with the service worker cache version
+const APP_VERSION = 23; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -26,9 +26,20 @@ const dayKey = (ts) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const fmtClock = (ms) => {
+  if (ms == null || !isFinite(ms)) return ""; // pasted/imported lines have no timestamp
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+
+// Turn a pasted transcript (e.g. from Apple Voice Memos) into taggable lines.
+function textToSegments(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  let parts = raw.includes("\n") ? raw.split(/\n+/) : raw.match(/[^.!?]+[.!?]*/g) || [raw];
+  parts = parts.map((s) => s.trim()).filter(Boolean);
+  const sp = speakers[0]?.id || null;
+  return parts.map((t) => ({ speakerId: sp, text: t })); // no timestamp
+}
 // Every typed word must appear somewhere in the text, any order.
 const wordsMatch = (query, hay) => {
   const h = hay.toLowerCase();
@@ -1364,6 +1375,11 @@ function openImportSheet(blob, durationMs, ts, filename) {
       <div class="speaker-row" id="imp-speakers">${speakerBtns}</div>
     </div>
     <div class="field">
+      <label>📝 Transcript (optional)</label>
+      <p class="sheet-note" style="margin:-2px 0 6px">Voice Memos can transcribe it free: open the memo, tap the transcript icon, copy &amp; paste here. Each line becomes taggable.</p>
+      <textarea id="imp-transcript" rows="3" placeholder="Paste the transcript here…"></textarea>
+    </div>
+    <div class="field">
       <label>What was said / context (optional)</label>
       <textarea id="imp-note" rows="2" placeholder="e.g. Argument about the bins, Sam &amp; me"></textarea>
     </div>
@@ -1392,7 +1408,14 @@ function openImportSheet(blob, durationMs, ts, filename) {
   $('[data-act="save"]', sheetEl).onclick = async () => {
     const title = $("#imp-title", sheetEl).value.trim() || `Voice note — ${fmtTime(ts)}`;
     const note = $("#imp-note", sheetEl).value.trim();
+    const pasted = $("#imp-transcript", sheetEl).value.trim();
     const who = [...picked].map((id) => speakerName(id)).join(", ");
+    // If exactly one speaker was picked, attribute the pasted lines to them.
+    const segments = textToSegments(pasted);
+    if (picked.size === 1) {
+      const only = [...picked][0];
+      segments.forEach((s) => (s.speakerId = only));
+    }
     const audioId = uid();
     await putAudio({ id: audioId, blob, mime: blob.type });
     await putEntry({
@@ -1403,7 +1426,7 @@ function openImportSheet(blob, durationMs, ts, filename) {
       emoji: "🎙️",
       audioId,
       durationMs,
-      transcript: [],
+      transcript: segments,
       detail: [who && `Speakers: ${who}`, note].filter(Boolean).join(" · ") || undefined,
     });
     closeSheet();
@@ -1622,8 +1645,13 @@ async function openVoiceDetail(id) {
     </div>` : ""}
     ${lines
       ? `<p class="sheet-note">Tap a name to change who said it.</p>${lines}`
-      : `<p class="sheet-note">No transcript was captured for this recording — iPhones sometimes can't transcribe while recording audio, or live transcription was switched off (🤫). The recording itself has everything; you can add a written note below.</p>`}
+      : `<p class="sheet-note">No transcript yet. Your iPhone can make one for free — see below.</p>`}
     <div class="field" style="margin-top:12px">
+      <label>${lines ? "Replace transcript (paste new)" : "📝 Paste a transcript"}</label>
+      <p class="sheet-note" style="margin:-2px 0 6px">Open this recording in the iPhone <strong>Voice Memos</strong> app, tap the transcript icon, copy the text and paste it here — each line becomes taggable.</p>
+      <textarea id="vd-transcript" rows="3" placeholder="Paste the transcript here…"></textarea>
+    </div>
+    <div class="field">
       <label>Written note</label>
       <textarea id="vd-note" rows="2" placeholder="e.g. Sam said the bins are Thursday now">${esc(e.detail || "")}</textarea>
     </div>
@@ -1652,12 +1680,14 @@ async function openVoiceDetail(id) {
     renderDiary();
   };
   $('[data-act="save"]', sheetEl).onclick = async () => {
+    const pasted = $("#vd-transcript", sheetEl).value.trim();
+    if (pasted) e.transcript = textToSegments(pasted);
     const note = $("#vd-note", sheetEl).value.trim();
     e.detail = note || undefined;
     await putEntry(e);
     closeSheet();
     renderDiary();
-    toast("Saved ✅");
+    toast(pasted ? "Transcript added — tap names to tag speakers ✅" : "Saved ✅");
   };
 }
 
@@ -1828,7 +1858,8 @@ function entryToText(e, withDate = false) {
   if (e.durationMs) s += ` (${fmtDur(e.durationMs)})`;
   if (e.detail) s += `\n   ${e.detail}`;
   for (const seg of e.transcript || []) {
-    s += `\n   ${speakerName(seg.speakerId)} [${fmtClock(seg.t)}]: “${seg.text}”`;
+    const at = fmtClock(seg.t);
+    s += `\n   ${speakerName(seg.speakerId)}${at ? ` [${at}]` : ""}: “${seg.text}”`;
   }
   if (e.photoIds?.length) {
     s += `\n   📷 ${e.photoIds.length} photo${e.photoIds.length === 1 ? "" : "s"} attached`;
