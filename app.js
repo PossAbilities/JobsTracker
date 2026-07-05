@@ -311,17 +311,46 @@ function renderTiles() {
   $("#add-tile").addEventListener("click", () => openTileSheet(null));
 
   $$(".tile[data-id]", tileGrid).forEach((el) => {
+    // press-and-hold opens the options menu; a quick tap logs as usual
+    let lpTimer = null;
+    let lpFired = false;
+    let startX = 0, startY = 0;
+    const lpStart = (x, y) => {
+      lpFired = false;
+      startX = x;
+      startY = y;
+      clearTimeout(lpTimer);
+      lpTimer = setTimeout(() => {
+        lpFired = true;
+        openTileOptions(el.dataset.id);
+      }, 500);
+    };
+    const lpCancel = () => clearTimeout(lpTimer);
+    el.addEventListener("touchstart", (e) => lpStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+    el.addEventListener("touchmove", (e) => {
+      if (Math.hypot(e.touches[0].clientX - startX, e.touches[0].clientY - startY) > 12) lpCancel();
+    }, { passive: true });
+    el.addEventListener("touchend", lpCancel);
+    el.addEventListener("touchcancel", lpCancel);
+    el.addEventListener("mousedown", (e) => lpStart(e.clientX, e.clientY));
+    el.addEventListener("mouseup", lpCancel);
+    el.addEventListener("mouseleave", lpCancel);
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
+
     el.addEventListener("click", (ev) => {
+      if (lpFired) {
+        // the tap that ended the long-press — don't also log
+        lpFired = false;
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
+      }
       const delBtn = ev.target.closest("[data-del]");
       const tile = tiles.find((t) => t.id === el.dataset.id);
       if (!tile) return;
       if (delBtn) {
         ev.stopPropagation();
-        confirmSheet("Delete this button?", `“${tile.label}” — the button goes, your diary entries stay.`, "Delete", () => {
-          tiles = tiles.filter((t) => t.id !== tile.id);
-          saveTiles();
-          renderTiles();
-        });
+        deleteTileWithConfirm(tile);
         return;
       }
       if (editingTiles) {
@@ -331,6 +360,64 @@ function renderTiles() {
       }
     });
   });
+}
+
+function deleteTileWithConfirm(tile) {
+  confirmSheet("Delete this button?", `“${tile.label}” — the button goes, your diary entries stay.`, "Delete", () => {
+    tiles = tiles.filter((t) => t.id !== tile.id);
+    saveTiles();
+    renderTiles();
+    toast("Button deleted");
+  });
+}
+
+function openTileOptions(id) {
+  const tile = tiles.find((t) => t.id === id);
+  if (!tile) return;
+  openSheet(`
+    <h3>${esc(tile.emoji)} ${esc(tile.label)}</h3>
+    <p class="sheet-note">In ${esc(tile.section || "Other")}</p>
+    <div class="settings-card">
+      <button class="settings-row" data-act="edit"><span>✏️ Rename / edit</span><span class="chev">›</span></button>
+      <button class="settings-row" data-act="move"><span>📂 Move to section</span><span class="chev">›</span></button>
+      <button class="settings-row danger" data-act="delete"><span>🗑 Delete button</span><span class="chev">›</span></button>
+    </div>`);
+  $('[data-act="edit"]', sheetEl).onclick = () => {
+    closeSheet();
+    openTileSheet(tile);
+  };
+  $('[data-act="move"]', sheetEl).onclick = () => {
+    closeSheet();
+    openTileMoveSheet(tile);
+  };
+  $('[data-act="delete"]', sheetEl).onclick = () => {
+    closeSheet();
+    deleteTileWithConfirm(tile);
+  };
+}
+
+function openTileMoveSheet(tile) {
+  const sections = [...new Set([...KNOWN_SECTIONS, ...tiles.map((t) => t.section || "Other"), "Other"])];
+  openSheet(`
+    <h3>Move “${esc(tile.label)}”</h3>
+    <div class="settings-card">
+      ${sections
+        .map(
+          (s) => `<button class="settings-row" data-sec="${esc(s)}">
+            <span>${esc(s)}</span><span class="chev">${s === (tile.section || "Other") ? "✓" : "›"}</span>
+          </button>`
+        )
+        .join("")}
+    </div>`);
+  $$("[data-sec]", sheetEl).forEach((btn) =>
+    btn.addEventListener("click", () => {
+      tile.section = btn.dataset.sec;
+      saveTiles();
+      renderTiles();
+      closeSheet();
+      toast(`Moved to ${btn.dataset.sec} 📂`);
+    })
+  );
 }
 
 async function logTask(tile, el) {
