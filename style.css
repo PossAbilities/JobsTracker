@@ -619,6 +619,57 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   cursor: pointer;
 }
 .tr-edit-line .tr-time { margin-left: 8px; }
+
+/* speaker picker popover */
+#speaker-pop {
+  position: fixed;
+  z-index: 95;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#speaker-pop button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+#speaker-pop button:active { background: var(--surface-3); }
+#speaker-pop .sp-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  flex: none;
+}
+#speaker-pop .sp-add { color: var(--amber); font-weight: 700; }
+#speaker-pop input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  padding: 10px 12px;
+  outline: none;
+  margin-bottom: 4px;
+}
 .tr-edit-line p {
   margin: 7px 0 6px;
   font-size: 14.5px;
