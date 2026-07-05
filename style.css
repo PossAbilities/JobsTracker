@@ -753,6 +753,21 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   font-variant-numeric: tabular-nums;
 }
 
+.kw-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.kw-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.kw-chip strong { color: var(--amber); font-variant-numeric: tabular-nums; font-weight: 700; }
+
 /* ---------- settings ---------- */
 .section-label {
   font-size: 13px;

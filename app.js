@@ -1313,10 +1313,48 @@ $$("#stats-day-row .chip").forEach((chip) =>
   })
 );
 
-function sectionForEntry(e) {
+const STOPWORDS = new Set(
+  ("the a an and or to of in on at for with from up out off my her his our their its it this that " +
+   "i we he she they you was were is are been did done just have has had again some more went got " +
+   "put took take made make can could would please log note that's after back").split(" ")
+);
+
+const words = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+
+// Learn keyword → section from the button labels, so free-text and voice
+// entries get counted under the right section instead of "Notes & other".
+function keywordSectionMap() {
+  const map = new Map();
+  for (const t of tiles) {
+    const sec = t.section || "Other";
+    for (const w of words(t.label)) {
+      if (!map.has(w)) map.set(w, new Map());
+      const m = map.get(w);
+      m.set(sec, (m.get(sec) || 0) + 1);
+    }
+  }
+  return map;
+}
+
+function sectionForEntry(e, kwMap) {
   if (e.type === "voice") return "Voice notes";
   const tile = tiles.find((t) => t.label.toLowerCase() === (e.title || "").toLowerCase());
-  return tile ? tile.section || "Other" : "Notes & other";
+  if (tile) return tile.section || "Other";
+  // keyword vote across the entry's words
+  const votes = new Map();
+  for (const w of words(e.title)) {
+    const secs = kwMap.get(w);
+    if (!secs) continue;
+    for (const [sec, n] of secs) votes.set(sec, (votes.get(sec) || 0) + n);
+  }
+  let best = null, bestN = 0;
+  for (const [sec, n] of votes) if (n > bestN) { best = sec; bestN = n; }
+  return best || "Notes & other";
 }
 
 function startOfToday() {
@@ -1341,9 +1379,10 @@ async function renderStats() {
   const first = dayEntries[0];
   const last = dayEntries[dayEntries.length - 1];
 
+  const kwMap = keywordSectionMap();
   const bySection = new Map();
   for (const e of dayEntries) {
-    const s = sectionForEntry(e);
+    const s = sectionForEntry(e, kwMap);
     bySection.set(s, (bySection.get(s) || 0) + 1);
   }
   const sectionRows = [...bySection.entries()].sort((a, b) => b[1] - a[1]);
@@ -1416,23 +1455,28 @@ async function renderStats() {
       ${barChartSVG(days)}
     </div>`;
 
-  // ---- top tasks, last 30 days ----
+  // ---- most logged, last 30 days (tasks AND manual/voice-dictated notes, merged) ----
   const cutoff = Date.now() - 30 * DAY_MS;
-  const counts = new Map();
+  const counts = new Map(); // key: lowercased title → {title, n}
   for (const e of all) {
-    if (e.ts >= cutoff && e.type === "task") counts.set(e.title, (counts.get(e.title) || 0) + 1);
+    if (e.ts < cutoff || (e.type !== "task" && e.type !== "note")) continue;
+    const key = (e.title || "").toLowerCase().trim();
+    if (!key) continue;
+    const rec = counts.get(key) || { title: e.title, n: 0 };
+    rec.n++;
+    counts.set(key, rec);
   }
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxTop = top[0]?.[1] || 1;
+  const top = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 5);
+  const maxTop = top[0]?.n || 1;
   const topCard = top.length
     ? `
     <div class="stats-card">
       <div class="sc-head"><h3>Most logged · last 30 days</h3></div>
       ${top
         .map(
-          ([title, n]) => `
+          ({ title, n }) => `
         <div class="hbar-row">
-          <span class="hb-label">${esc(title)}</span>
+          <span class="hb-label">${esc(title.charAt(0).toUpperCase() + title.slice(1))}</span>
           <div class="hb-track"><div class="hb-fill" style="width:${Math.max(6, (n / maxTop) * 100)}%"></div></div>
           <span class="hb-count">${n}</span>
         </div>`
@@ -1441,7 +1485,25 @@ async function renderStats() {
     </div>`
     : "";
 
-  el.innerHTML = summaryCard + tilesRow + trendCard + topCard;
+  // ---- top keywords, last 30 days — what actually keeps coming up ----
+  const kwCounts = new Map();
+  for (const e of all) {
+    if (e.ts < cutoff) continue;
+    const text = [e.title, e.detail, ...(e.transcript || []).map((s) => s.text)].join(" ");
+    for (const w of new Set(words(text))) kwCounts.set(w, (kwCounts.get(w) || 0) + 1);
+  }
+  const topKw = [...kwCounts.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const kwCard = topKw.length
+    ? `
+    <div class="stats-card">
+      <div class="sc-head"><h3>Top keywords · last 30 days</h3></div>
+      <div class="kw-cloud">
+        ${topKw.map(([w, n]) => `<span class="kw-chip">${esc(w)} <strong>×${n}</strong></span>`).join("")}
+      </div>
+    </div>`
+    : "";
+
+  el.innerHTML = summaryCard + tilesRow + trendCard + topCard + kwCard;
 
   $("#share-summary")?.addEventListener("click", () => shareDaySummary(dayStart, dayEntries, sectionRows, typeBits));
   $$(".trend-chart [data-i]", el).forEach((bar) =>
