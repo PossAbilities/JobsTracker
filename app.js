@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 19; // keep in step with the service worker cache version
+const APP_VERSION = 20; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -221,6 +221,7 @@ function openSheet(html) {
   backdropEl.classList.remove("hidden");
 }
 function closeSheet() {
+  if (typeof closeSpeakerPop === "function") closeSpeakerPop();
   sheetEl.classList.add("hidden");
   backdropEl.classList.add("hidden");
   sheetEl.innerHTML = "";
@@ -1275,6 +1276,68 @@ async function renderDiary() {
   );
 }
 
+/* ---- speaker picker popover: choose a speaker or add a new one ---- */
+function closeSpeakerPop() {
+  $("#speaker-pop")?.remove();
+  document.removeEventListener("pointerdown", speakerPopOutside, true);
+}
+function speakerPopOutside(ev) {
+  if (!ev.target.closest("#speaker-pop")) closeSpeakerPop();
+}
+function renderSpeakerPopList(pop, currentId, onPick) {
+  pop.innerHTML =
+    speakers
+      .map(
+        (s) => `<button data-id="${s.id}"><span class="sp-dot" style="background:${speakerColour(s.id)}"></span>${esc(s.name)}${s.id === currentId ? " ✓" : ""}</button>`
+      )
+      .join("") + `<button data-add class="sp-add">＋ New speaker…</button>`;
+  $$("button[data-id]", pop).forEach((b) =>
+    b.addEventListener("click", () => {
+      onPick(b.dataset.id);
+      closeSpeakerPop();
+    })
+  );
+  $("[data-add]", pop).addEventListener("click", () => {
+    pop.innerHTML = `
+      <input id="sp-new-name" type="text" maxlength="24" placeholder="Name, or “Unknown man”…" autocomplete="off">
+      <button data-save class="sp-add">Add &amp; assign</button>`;
+    const input = $("#sp-new-name", pop);
+    input.focus();
+    const commit = () => {
+      const name = input.value.trim();
+      if (!name) return;
+      if (speakers.length >= 8) {
+        toast("That's plenty of speakers!");
+        closeSpeakerPop();
+        return;
+      }
+      const sp = { id: uid(), name };
+      speakers.push(sp);
+      saveSpeakers();
+      onPick(sp.id);
+      closeSpeakerPop();
+    };
+    $("[data-save]", pop).addEventListener("click", commit);
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") commit();
+    });
+  });
+}
+function openSpeakerPicker(anchorEl, currentId, onPick) {
+  closeSpeakerPop();
+  const pop = document.createElement("div");
+  pop.id = "speaker-pop";
+  document.body.appendChild(pop);
+  renderSpeakerPopList(pop, currentId, onPick);
+  const r = anchorEl.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+  pop.style.left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8) + "px";
+  const below = r.bottom + 6;
+  pop.style.top = (below + h < window.innerHeight - 8 ? below : Math.max(8, r.top - h - 6)) + "px";
+  setTimeout(() => document.addEventListener("pointerdown", speakerPopOutside, true), 0);
+}
+
 /* ---- voice entry detail: full transcript, speaker editing, note ---- */
 async function openVoiceDetail(id) {
   const all = await getAllEntries();
@@ -1317,14 +1380,14 @@ async function openVoiceDetail(id) {
   if (playBtn) playBtn.addEventListener("click", () => togglePlay(e.audioId, playBtn));
 
   $$(".tr-speaker-btn", sheetEl).forEach((btn) =>
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", () => {
       const seg = e.transcript[Number(btn.dataset.i)];
-      const idx = speakers.findIndex((s) => s.id === seg.speakerId);
-      const next = speakers[(idx + 1) % speakers.length] || speakers[0];
-      seg.speakerId = next.id;
-      btn.style.color = speakerColour(next.id);
-      btn.textContent = `${next.name} ▾`;
-      await putEntry(e);
+      openSpeakerPicker(btn, seg.speakerId, async (id) => {
+        seg.speakerId = id;
+        btn.style.color = speakerColour(id);
+        btn.textContent = `${speakerName(id)} ▾`;
+        await putEntry(e);
+      });
     })
   );
 
