@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 21; // keep in step with the service worker cache version
+const APP_VERSION = 22; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1309,6 +1309,105 @@ function openRecoverySheet(blob, durationMs, segments, startTs) {
     await clearRecStorage();
     closeSheet();
     toast("Recovered recording saved 🛟");
+    renderTodayStrip();
+  };
+}
+
+/* ---- import an audio file (e.g. a Voice Memo recorded with the screen
+   locked) into the diary as a voice entry you can then tag ---- */
+function audioDuration(blob) {
+  return new Promise((resolve) => {
+    const a = document.createElement("audio");
+    a.preload = "metadata";
+    const url = URL.createObjectURL(blob);
+    const done = (ms) => {
+      URL.revokeObjectURL(url);
+      resolve(ms);
+    };
+    a.onloadedmetadata = () =>
+      done(isFinite(a.duration) && a.duration > 0 ? Math.round(a.duration * 1000) : 0);
+    a.onerror = () => done(0);
+    a.src = url;
+  });
+}
+
+$("#import-audio-btn").addEventListener("click", () => $("#import-audio-input").click());
+$("#import-audio-input").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  if (!/^audio\//.test(file.type) && !/\.(m4a|mp3|wav|aac|caf|ogg|webm)$/i.test(file.name)) {
+    toast("That doesn't look like an audio file");
+    return;
+  }
+  toast("Importing…");
+  const durationMs = await audioDuration(file);
+  // Use the file's own timestamp so the diary shows when it was recorded.
+  const ts = file.lastModified || Date.now();
+  const blob = file.slice(0, file.size, file.type || "audio/mp4");
+  openImportSheet(blob, durationMs, ts, file.name);
+});
+
+function openImportSheet(blob, durationMs, ts, filename) {
+  const speakerBtns = speakers
+    .map((s) => `<button type="button" class="speaker-chip" data-sp="${s.id}" style="border-color:${speakerColour(s.id)}">${esc(s.name)}</button>`)
+    .join("");
+  openSheet(`
+    <h3>📂 Import recording</h3>
+    <p class="sheet-note">${esc(filename)} · ${durationMs ? fmtDur(durationMs) : "audio"} · ${fmtFullDate(ts)}</p>
+    <div class="field">
+      <label>Title</label>
+      <input id="imp-title" type="text" maxlength="80" value="${esc(`Voice note — ${fmtTime(ts)}`)}">
+    </div>
+    <div class="field">
+      <label>Who's on it? (optional — tap any that apply)</label>
+      <div class="speaker-row" id="imp-speakers">${speakerBtns}</div>
+    </div>
+    <div class="field">
+      <label>What was said / context (optional)</label>
+      <textarea id="imp-note" rows="2" placeholder="e.g. Argument about the bins, Sam &amp; me"></textarea>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="cancel">Cancel</button>
+      <button class="btn primary" data-act="save">Save to diary</button>
+    </div>`);
+  const picked = new Set();
+  $$("#imp-speakers .speaker-chip", sheetEl).forEach((b) =>
+    b.addEventListener("click", () => {
+      const id = b.dataset.sp;
+      if (picked.has(id)) {
+        picked.delete(id);
+        b.classList.remove("active");
+        b.style.background = "";
+        b.style.color = "";
+      } else {
+        picked.add(id);
+        b.classList.add("active");
+        b.style.background = speakerColour(id);
+        b.style.color = "#10121a";
+      }
+    })
+  );
+  $('[data-act="cancel"]', sheetEl).onclick = closeSheet;
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const title = $("#imp-title", sheetEl).value.trim() || `Voice note — ${fmtTime(ts)}`;
+    const note = $("#imp-note", sheetEl).value.trim();
+    const who = [...picked].map((id) => speakerName(id)).join(", ");
+    const audioId = uid();
+    await putAudio({ id: audioId, blob, mime: blob.type });
+    await putEntry({
+      id: uid(),
+      type: "voice",
+      ts,
+      title,
+      emoji: "🎙️",
+      audioId,
+      durationMs,
+      transcript: [],
+      detail: [who && `Speakers: ${who}`, note].filter(Boolean).join(" · ") || undefined,
+    });
+    closeSheet();
+    toast(`Imported — ${fmtTime(ts)} 📂`);
     renderTodayStrip();
   };
 }

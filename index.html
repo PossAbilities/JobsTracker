@@ -71,7 +71,12 @@
         <button class="chip" id="transcribe-toggle"></button>
         <p class="rec-toggle-note" id="rec-toggle-note"></p>
         <p class="rec-lock-warn">⚠️ Keep this screen on while recording. If the phone locks or you switch apps, iPhone stops the recording — but Ta-Da! now saves what it captured so you can recover it.</p>
+        <div class="rec-import">
+          <p class="rec-import-note">Need to record with the screen locked? Record it in the <strong>Voice Memos</strong> app, then bring it in here:</p>
+          <button class="btn subtle" id="import-audio-btn">📂 Import a recording</button>
+        </div>
       </div>
+      <input type="file" id="import-audio-input" accept="audio/*,.m4a,.mp3,.wav,.aac,.caf" hidden>
 
       <div class="rec-live hidden" id="rec-live">
         <div class="rec-topline">
