@@ -1102,6 +1102,79 @@ async function renderDiary() {
     photoURL(img.dataset.photo).then((url) => (img.src = url));
     img.addEventListener("click", () => openLightbox(img.dataset.entry, img.dataset.photo));
   });
+  $$(".entry.type-voice", timeline).forEach((card) =>
+    card.addEventListener("click", (ev) => {
+      if (ev.target.closest("button, img, .audio-player")) return;
+      openVoiceDetail(card.dataset.entry);
+    })
+  );
+}
+
+/* ---- voice entry detail: full transcript, speaker editing, note ---- */
+async function openVoiceDetail(id) {
+  const all = await getAllEntries();
+  const e = all.find((x) => x.id === id);
+  if (!e) return;
+
+  const lines = (e.transcript || [])
+    .map(
+      (s, i) => `
+    <div class="tr-edit-line">
+      <button class="tr-speaker-btn" data-i="${i}" style="color:${speakerColour(s.speakerId)}">${esc(speakerName(s.speakerId))} ▾</button>
+      <span class="tr-time">${fmtClock(s.t)}</span>
+      <p>${esc(s.text)}</p>
+    </div>`
+    )
+    .join("");
+
+  openSheet(`
+    <h3>${esc(e.title)}</h3>
+    <p class="sheet-note">${fmtFullDate(e.ts)} at ${fmtTime(e.ts)}${e.durationMs ? ` · ${fmtDur(e.durationMs)}` : ""}</p>
+    ${e.audioId ? `
+    <div class="audio-player" style="margin:0 0 14px">
+      <button class="ap-play" data-audio="${e.audioId}" aria-label="Play">▶</button>
+      <div class="ap-track"><div class="ap-fill"></div></div>
+      <span class="ap-time">${fmtDur(e.durationMs || 0)}</span>
+    </div>` : ""}
+    ${lines
+      ? `<p class="sheet-note">Tap a name to change who said it.</p>${lines}`
+      : `<p class="sheet-note">No transcript was captured for this recording — iPhones sometimes can't transcribe while recording audio, or live transcription was switched off (🤫). The recording itself has everything; you can add a written note below.</p>`}
+    <div class="field" style="margin-top:12px">
+      <label>Written note</label>
+      <textarea id="vd-note" rows="2" placeholder="e.g. Sam said the bins are Thursday now">${esc(e.detail || "")}</textarea>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="close">Close</button>
+      <button class="btn primary" data-act="save">Save</button>
+    </div>`);
+
+  const playBtn = $(".ap-play", sheetEl);
+  if (playBtn) playBtn.addEventListener("click", () => togglePlay(e.audioId, playBtn));
+
+  $$(".tr-speaker-btn", sheetEl).forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const seg = e.transcript[Number(btn.dataset.i)];
+      const idx = speakers.findIndex((s) => s.id === seg.speakerId);
+      const next = speakers[(idx + 1) % speakers.length] || speakers[0];
+      seg.speakerId = next.id;
+      btn.style.color = speakerColour(next.id);
+      btn.textContent = `${next.name} ▾`;
+      await putEntry(e);
+    })
+  );
+
+  $('[data-act="close"]', sheetEl).onclick = () => {
+    closeSheet();
+    renderDiary();
+  };
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const note = $("#vd-note", sheetEl).value.trim();
+    e.detail = note || undefined;
+    await putEntry(e);
+    closeSheet();
+    renderDiary();
+    toast("Saved ✅");
+  };
 }
 
 function renderEntry(e) {
@@ -1141,12 +1214,16 @@ function renderEntry(e) {
     </div>`;
   }
 
+  if (e.type === "voice" && !e.transcript?.length && !e.detail) {
+    extra = `<div class="e-transcript"><p class="tr-line" style="color:var(--faint)">No transcript captured — tap for details</p></div>` + extra;
+  }
+
   return `
   <div class="entry type-${e.type}" data-entry="${e.id}">
     <div class="e-icon">${icon}</div>
     <div class="e-body">
       <p class="e-title">${esc(e.title)}</p>
-      <span class="e-time">${fmtTime(e.ts)}${e.durationMs ? ` · ${fmtDur(e.durationMs)}` : ""}</span>
+      <span class="e-time">${fmtTime(e.ts)}${e.durationMs ? ` · ${fmtDur(e.durationMs)}` : ""}${e.type === "voice" ? ` · transcript ›` : ""}</span>
       ${extra}
     </div>
     <button class="e-menu" data-id="${e.id}" aria-label="Entry options">⋯</button>
