@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 20; // keep in step with the service worker cache version
+const APP_VERSION = 21; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -48,7 +48,7 @@ let dbPromise = null;
 function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("entries")) {
@@ -59,6 +59,11 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains("photos")) {
         db.createObjectStore("photos", { keyPath: "id" });
+      }
+      // Live recording chunks, persisted second-by-second so an interrupted
+      // recording (screen lock / app killed) can be recovered on next open.
+      if (!db.objectStoreNames.contains("recchunks")) {
+        db.createObjectStore("recchunks", { keyPath: "k" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -86,6 +91,9 @@ const putPhoto = (p) => idb("photos", "readwrite", (s) => s.put(p));
 const getPhoto = (id) => idb("photos", "readonly", (s) => s.get(id));
 const deletePhoto = (id) => idb("photos", "readwrite", (s) => s.delete(id));
 const getAllEntries = () => idb("entries", "readonly", (s) => s.getAll());
+const putRecChunk = (k, blob) => idb("recchunks", "readwrite", (s) => s.put({ k, blob }));
+const getAllRecChunks = () => idb("recchunks", "readonly", (s) => s.getAll());
+const clearRecChunks = () => idb("recchunks", "readwrite", (s) => s.clear());
 
 /* ---------------- settings (localStorage) ---------------- */
 const KNOWN_SECTIONS = ["Tidying up", "Cleaning", "Laundry", "Kitchen", "Kids", "Pets", "Errands"];
@@ -823,7 +831,38 @@ const rec = {
   analyser: null,
   raf: 0,
   discard: false,
+  interrupted: false,
+  chunkIndex: 0,
 };
+
+// Persist a compact record of the in-flight recording so it survives an
+// iOS screen-lock/app-kill and can be recovered on next open.
+const REC_META_KEY = "tada-rec";
+function persistRecMeta() {
+  try {
+    localStorage.setItem(
+      REC_META_KEY,
+      JSON.stringify({
+        active: true,
+        startTs: rec.startTs,
+        durationMs: Date.now() - rec.startTs,
+        mime: rec.recorder?.mimeType || "audio/mp4",
+        segments: rec.segments,
+      })
+    );
+  } catch {}
+}
+function readRecMeta() {
+  try {
+    return JSON.parse(localStorage.getItem(REC_META_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+async function clearRecStorage() {
+  localStorage.removeItem(REC_META_KEY);
+  try { await clearRecChunks(); } catch {}
+}
 
 // Live transcription toggle. Off = fully silent recording: iOS plays its
 // system "dictation ding" whenever speech recognition starts and web apps
@@ -883,11 +922,14 @@ function showRecWarning(msg) {
 async function startRecording(auto = false) {
   if (rec.recorder && rec.recorder.state === "recording") return;
   rec.discard = false;
+  rec.interrupted = false;
   rec.chunks = [];
   rec.segments = [];
   rec.interim = "";
+  rec.chunkIndex = 0;
   rec.activeSpeaker = speakers[0]?.id || null;
   recWarn.classList.add("hidden");
+  await clearRecStorage(); // drop any leftovers from a previous session
 
   // 1. Microphone
   try {
@@ -909,12 +951,18 @@ async function startRecording(auto = false) {
   } catch {
     rec.recorder = new MediaRecorder(rec.stream);
   }
+  rec.startTs = Date.now();
   rec.recorder.ondataavailable = (e) => {
-    if (e.data && e.data.size) rec.chunks.push(e.data);
+    if (!e.data || !e.data.size) return;
+    rec.chunks.push(e.data);
+    // Persist each chunk immediately so a lock/kill can't lose the whole lot.
+    const k = rec.chunkIndex++;
+    putRecChunk(k, e.data).catch(() => {});
+    persistRecMeta();
   };
   rec.recorder.onstop = onRecorderStopped;
   rec.recorder.start(1000);
-  rec.startTs = Date.now();
+  persistRecMeta();
 
   // 3. UI
   recIdle.classList.add("hidden");
@@ -1098,16 +1146,41 @@ async function onRecorderStopped() {
   liveTranscript.innerHTML = "";
   liveTranscript.appendChild(ltPlaceholder);
 
+  if (rec.interrupted) {
+    // Screen locked / app backgrounded mid-recording. Everything is already
+    // persisted (chunks + meta); recovery is offered when the app is visible
+    // again, so don't try to open a sheet here (the page may be hidden).
+    rec.interrupted = false;
+    return;
+  }
   if (rec.discard) {
+    await clearRecStorage();
     toast("Recording discarded");
     return;
   }
   const blob = new Blob(rec.chunks, { type: rec.recorder?.mimeType || "audio/mp4" });
   if (!blob.size) {
+    await clearRecStorage();
     toast("Hmm — no audio was captured. Try again?");
     return;
   }
   openSaveSheet(blob, durationMs, rec.segments.slice(), Date.now() - durationMs);
+}
+
+// Called when the page is hidden (screen lock / app switch) mid-recording:
+// grab the last chunk, stop cleanly, and leave everything persisted so the
+// recording can be recovered rather than lost.
+function interruptRecording() {
+  if (!rec.recorder || rec.recorder.state !== "recording") return;
+  rec.interrupted = true;
+  if (rec.interim) {
+    rec.segments.push({ speakerId: rec.activeSpeaker, text: rec.interim, t: Date.now() - rec.startTs });
+    rec.interim = "";
+  }
+  persistRecMeta();
+  try { rec.recorder.requestData(); } catch {}
+  stopRecordingMachinery();
+  try { rec.recorder.stop(); } catch {}
 }
 
 function openSaveSheet(blob, durationMs, segments, startTs) {
@@ -1144,7 +1217,8 @@ function openSaveSheet(blob, durationMs, segments, startTs) {
       <button class="btn primary" data-act="save">Save to diary</button>
     </div>`);
 
-  $('[data-act="cancel"]', sheetEl).onclick = () => {
+  $('[data-act="cancel"]', sheetEl).onclick = async () => {
+    await clearRecStorage();
     closeSheet();
     toast("Recording discarded");
   };
@@ -1165,8 +1239,76 @@ function openSaveSheet(blob, durationMs, segments, startTs) {
       detail: note || undefined,
     };
     await putEntry(entry);
+    await clearRecStorage();
     closeSheet();
     toast(`Saved — ${fmtTime(startTs)}, ${fmtDur(durationMs)} 🎙️`);
+    renderTodayStrip();
+  };
+}
+
+/* ---- recover an interrupted recording (screen lock / app kill) ---- */
+let recoveryChecking = false;
+async function checkForRecovery() {
+  if (recoveryChecking) return;
+  // Don't interrupt an active recording or an open sheet.
+  if (rec.recorder && rec.recorder.state === "recording") return;
+  const meta = readRecMeta();
+  if (!meta || !meta.active) return;
+  recoveryChecking = true;
+  try {
+    const chunks = (await getAllRecChunks()).sort((a, b) => a.k - b.k);
+    if (!chunks.length) {
+      await clearRecStorage();
+      return;
+    }
+    const blob = new Blob(chunks.map((c) => c.blob), { type: meta.mime || "audio/mp4" });
+    // Flag inactive so we don't re-prompt in a loop; keep chunks until decided.
+    meta.active = false;
+    localStorage.setItem(REC_META_KEY, JSON.stringify(meta));
+    if (!blob.size) {
+      await clearRecStorage();
+      return;
+    }
+    const durationMs = meta.durationMs || chunks.length * 1000;
+    openRecoverySheet(blob, durationMs, meta.segments || [], meta.startTs || Date.now() - durationMs);
+  } finally {
+    recoveryChecking = false;
+  }
+}
+
+function openRecoverySheet(blob, durationMs, segments, startTs) {
+  const preview = segments.length
+    ? segments.slice(0, 4).map(
+        (s) => `<p class="tr-line"><span class="tr-speaker" style="color:${speakerColour(s.speakerId)}">${esc(speakerName(s.speakerId))}</span> <span class="tr-time">${fmtClock(s.t)}</span><br>${esc(s.text)}</p>`
+      ).join("") + (segments.length > 4 ? `<p class="sheet-note">…and ${segments.length - 4} more</p>` : "")
+    : "";
+  openSheet(`
+    <h3>🛟 Recovered a recording</h3>
+    <p class="sheet-note">This recording was interrupted — probably the screen locked or the app closed. Here's everything that was captured (${fmtDur(durationMs)}). Save it before it's gone.</p>
+    <div class="field">
+      <label>Title</label>
+      <input id="rec-title" type="text" maxlength="80" value="${esc(`Voice note — ${fmtTime(startTs)}`)}">
+    </div>
+    ${preview ? `<div class="field"><label>Transcript</label><div class="e-transcript" style="border:none;padding-top:0;margin-top:0">${preview}</div></div>` : ""}
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="discard">Discard</button>
+      <button class="btn primary" data-act="save">Save to diary</button>
+    </div>`);
+  $('[data-act="discard"]', sheetEl).onclick = () => {
+    confirmSheet("Discard the recovered recording?", "It can't be got back once discarded.", "Discard", async () => {
+      await clearRecStorage();
+      closeSheet();
+      toast("Recovered recording discarded");
+    });
+  };
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const title = $("#rec-title", sheetEl).value.trim() || `Voice note — ${fmtTime(startTs)}`;
+    const audioId = uid();
+    await putAudio({ id: audioId, blob, mime: blob.type });
+    await putEntry({ id: uid(), type: "voice", ts: startTs, title, emoji: "🎙️", audioId, durationMs, transcript: segments });
+    await clearRecStorage();
+    closeSheet();
+    toast("Recovered recording saved 🛟");
     renderTodayStrip();
   };
 }
@@ -1176,6 +1318,21 @@ $("#rec-stop-btn").addEventListener("click", () => stopRecording(false));
 $("#rec-cancel-btn").addEventListener("click", () =>
   confirmSheet("Discard this recording?", "It won't be saved anywhere.", "Discard", () => stopRecording(true))
 );
+
+// The moment iOS hides the page (screen lock / app switch), recording is
+// about to be frozen — salvage what we have. When we come back, offer to
+// recover it, and re-acquire the screen wake lock.
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) {
+    interruptRecording();
+  } else {
+    if (rec.recorder && rec.recorder.state === "recording") {
+      try { rec.wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+    }
+    checkForRecovery();
+  }
+});
+window.addEventListener("pagehide", interruptRecording);
 
 /* ============================================================
    DIARY TAB
@@ -2016,6 +2173,9 @@ renderTranscribeToggle();
 
 // Ask the browser not to evict our data under storage pressure.
 navigator.storage?.persist?.();
+
+// If the last session was recording when it was killed, offer recovery.
+setTimeout(checkForRecovery, 800);
 
 // Deep links for iOS Shortcuts / Siri / Action button:
 //   ?log=<anything you said or typed> — logs it instantly (matches a button if one fits)
