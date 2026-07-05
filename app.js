@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 18; // keep in step with the service worker cache version
+const APP_VERSION = 19; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -444,6 +444,36 @@ async function logTask(tile, el) {
   renderTodayStrip();
 }
 
+// Suggest an icon from the words in a button label. Ordered: specific
+// things first, generic verbs last. Short stems must match a whole word.
+const EMOJI_HINTS = [
+  ["dog", "🐕"], ["cat", "🐈"], ["litter", "💩"], ["juic", "🧃"], ["actif", "🍟"],
+  ["fryer", "🍟"], ["dishwash", "🍽️"], ["dish", "🍽️"], ["sink", "🧽"], ["kettle", "☕"],
+  ["cuppa", "☕"], ["tea", "☕"], ["coffee", "🧋"], ["breakfast", "🍳"], ["lunch", "🥪"],
+  ["dinner", "🍝"], ["cook", "🍳"], ["iron", "👔"], ["laundry", "🧺"], ["cloth", "👕"],
+  ["cushion", "🛋️"], ["sofa", "🛋️"], ["couch", "🛋️"], ["bed", "🛏️"], ["cover", "🛏️"],
+  ["cigarette", "🚬"], ["smok", "🚬"], ["bin", "🗑️"], ["rubbish", "🗑️"], ["trash", "🗑️"],
+  ["hoover", "🧹"], ["vacuum", "🧹"], ["mop", "🧹"], ["dust", "🪶"], ["bath", "🛁"],
+  ["shower", "🚿"], ["school", "🎒"], ["kid", "🧒"], ["football", "⚽"], ["post", "📮"],
+  ["parcel", "📦"], ["package", "📦"], ["shop", "🛒"], ["groc", "🛒"], ["phone", "📞"],
+  ["rang", "📞"], ["call", "📞"], ["car", "🚗"], ["drove", "🚗"], ["driv", "🚗"],
+  ["garden", "🪴"], ["plant", "🪴"], ["water", "🪴"], ["fix", "🛠️"], ["repair", "🛠️"],
+  ["med", "💊"], ["pill", "💊"], ["tablet", "💊"], ["church", "⛪"], ["surface", "🧼"],
+  ["wipe", "🧼"], ["table", "🪑"], ["wash", "🫧"], ["dry", "🌀"], ["clean", "🧽"],
+  ["tidy", "🧹"], ["pick", "🧺"],
+];
+
+function suggestEmoji(label) {
+  const ws = String(label || "").toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+  for (const [stem, emoji] of EMOJI_HINTS) {
+    const hit = ws.some((w) =>
+      stem.length <= 3 ? w === stem || w === stem + "s" : w.startsWith(stem)
+    );
+    if (hit) return emoji;
+  }
+  return null;
+}
+
 function openTileSheet(tile) {
   const isNew = !tile;
   const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "👔", "🥣", "🍟", "🧃", "🧼", "🪑", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
@@ -475,12 +505,48 @@ function openTileSheet(tile) {
       <button class="btn primary" data-act="save">${isNew ? "Add button" : "Save"}</button>
     </div>`);
   let chosen = current;
+  let userPicked = !isNew; // editing keeps its icon; new buttons follow the text
+  const strip = $("#emoji-strip", sheetEl);
+
+  function markSelected(emoji) {
+    chosen = emoji;
+    let match = null;
+    $$("#emoji-suggest", strip).forEach((n) => n.remove());
+    $$("button", strip).forEach((b) => {
+      const on = b.dataset.emoji === emoji;
+      b.classList.toggle("sel", on);
+      if (on) match = b;
+    });
+    if (!match) {
+      // suggested icon isn't in the strip — show it as a highlighted first chip
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.id = "emoji-suggest";
+      chip.dataset.emoji = emoji;
+      chip.className = "sel";
+      chip.textContent = emoji;
+      chip.addEventListener("click", () => {
+        userPicked = true;
+        markSelected(emoji);
+      });
+      strip.prepend(chip);
+    }
+  }
+
   $$("#emoji-strip button", sheetEl).forEach((b) =>
     b.addEventListener("click", () => {
-      chosen = b.dataset.emoji;
-      $$("#emoji-strip button", sheetEl).forEach((x) => x.classList.toggle("sel", x === b));
+      userPicked = true;
+      markSelected(b.dataset.emoji);
     })
   );
+
+  const labelInput = $("#tile-label-input", sheetEl);
+  labelInput.addEventListener("input", () => {
+    if (userPicked) return;
+    const sug = suggestEmoji(labelInput.value);
+    markSelected(sug || "⭐");
+  });
+
   const sectionSelect = $("#tile-section-select", sheetEl);
   const sectionNew = $("#tile-section-new", sheetEl);
   sectionSelect.addEventListener("change", () => {
