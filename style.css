@@ -342,6 +342,22 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   border-radius: 12px;
   padding: 10px 14px;
 }
+.rec-import {
+  margin-top: 14px;
+  max-width: 320px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.rec-import-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.rec-import-note strong { color: var(--text); }
 
 .rec-live { display: flex; flex-direction: column; gap: 14px; }
 .rec-live.hidden { display: none; }
