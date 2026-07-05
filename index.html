@@ -162,9 +162,15 @@
     <input type="file" id="import-file" accept="application/json" hidden>
 
     <h2 class="section-label">About</h2>
-    <div class="settings-card about-card">
+    <div class="settings-card">
+      <button class="settings-row" id="update-btn">
+        <span>🔄 Check for updates now</span><span class="chev">›</span>
+      </button>
+    </div>
+    <div class="settings-card about-card" style="margin-top:12px">
       <p><strong>Ta-Da!</strong> — a to-<em>da</em> list, not a to-do list.</p>
       <p>Built for one job: proving you did the thing, heard the thing, and did it at 7:42pm. All entries, audio and transcripts live only in this app on this phone.</p>
+      <p class="tiny" id="version-info"></p>
       <p class="tiny" id="storage-info"></p>
     </div>
     <div class="safe-bottom"></div>

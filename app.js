@@ -4,6 +4,8 @@
    ============================================================ */
 "use strict";
 
+const APP_VERSION = 18; // keep in step with the service worker cache version
+
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1003,6 +1005,16 @@ function stopRecordingMachinery() {
 
 function stopRecording(discard) {
   rec.discard = discard;
+  // iOS often leaves the last stretch of speech as a provisional (interim)
+  // result and never finalises it before stop — capture it or it's lost.
+  if (!discard && rec.interim) {
+    rec.segments.push({
+      speakerId: rec.activeSpeaker,
+      text: rec.interim,
+      t: Date.now() - rec.startTs,
+    });
+    rec.interim = "";
+  }
   stopRecordingMachinery();
   if (rec.recorder && rec.recorder.state !== "inactive") {
     rec.recorder.stop(); // onRecorderStopped fires next
@@ -1762,13 +1774,26 @@ function renderSettings() {
     });
   });
 
-  // storage info
+  // version + storage info
+  $("#version-info").textContent = `Version ${APP_VERSION}`;
   navigator.storage?.estimate?.().then(({ usage }) => {
     if (usage != null) {
       $("#storage-info").textContent = `Using ${(usage / 1048576).toFixed(1)} MB of on-device storage.`;
     }
   });
 }
+
+// Force-refresh the app shell: drop caches and the service worker, reload.
+// Diary data lives in IndexedDB/localStorage and is untouched.
+$("#update-btn").addEventListener("click", async () => {
+  toast("Fetching the latest version… 🔄");
+  try {
+    const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
+    for (const r of regs) await r.unregister();
+    if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+  } catch {}
+  setTimeout(() => location.reload(), 400);
+});
 
 $("#add-speaker-btn").addEventListener("click", () => {
   if (speakers.length >= 6) {
