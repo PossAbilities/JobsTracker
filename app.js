@@ -125,6 +125,8 @@ const DEFAULT_TILES = [
   { id: "t35", emoji: "🧽", label: "Washed the dishes in the sink", section: "Kitchen" },
   { id: "t36", emoji: "🍟", label: "Cleaned the Actifryer after Sam's cooking", section: "Kitchen" },
   { id: "t37", emoji: "🧃", label: "Cleaned the juicer after Sam using it", section: "Kitchen" },
+  { id: "t38", emoji: "🧼", label: "Wiped down the kitchen surfaces", section: "Kitchen" },
+  { id: "t39", emoji: "🪑", label: "Wiped the dining table", section: "Kitchen" },
 ];
 const SPEAKER_COLOURS = ["#6fa8ff", "#ff9ec1", "#8ae68a", "#c9a2ff", "#ffd166", "#7fd8f5"];
 const DEFAULT_SPEAKERS = [
@@ -145,7 +147,7 @@ let speakers = loadJSON("tada-speakers", DEFAULT_SPEAKERS);
 
 // One-time migrations: add newer starter buttons to installs that
 // customised their tiles before those defaults existed.
-for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18], ["tada-tiles-v5", 24], ["tada-tiles-v6", 31], ["tada-tiles-v7", 36]]) {
+for (const [flag, start] of [["tada-tiles-v2", 6], ["tada-tiles-v3", 10], ["tada-tiles-v4", 18], ["tada-tiles-v5", 24], ["tada-tiles-v6", 31], ["tada-tiles-v7", 36], ["tada-tiles-v8", 37]]) {
   if (localStorage.getItem(flag)) continue;
   const have = new Set(tiles.map((t) => t.label.toLowerCase()));
   for (const t of DEFAULT_TILES.slice(start)) {
@@ -355,7 +357,7 @@ async function logTask(tile, el) {
 
 function openTileSheet(tile) {
   const isNew = !tile;
-  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "👔", "🥣", "🍟", "🧃", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
+  const emojis = ["🧺", "👕", "🍽️", "🗑️", "🐕", "💊", "☕", "🧋", "💩", "🫧", "🌀", "🚬", "🚭", "🛋️", "🛏️", "🧦", "👔", "🥣", "🍟", "🧃", "🧼", "🪑", "🧹", "🪶", "🧽", "🛁", "🛒", "📞", "🚗", "🧒", "🎒", "🏫", "⚽", "🍝", "🥪", "🍳", "📮", "📦", "🪴", "🛠️", "💌", "🚿", "📬", "🐈", "⭐", "✅"];
   const current = tile?.emoji || "⭐";
   const currentSection = tile?.section || "Other";
   const sections = [...new Set([...KNOWN_SECTIONS, ...tiles.map((t) => t.section || "Other"), "Other"])];
