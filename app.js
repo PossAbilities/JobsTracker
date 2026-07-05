@@ -27,6 +27,12 @@ const fmtClock = (ms) => {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+// Every typed word must appear somewhere in the text, any order.
+const wordsMatch = (query, hay) => {
+  const h = hay.toLowerCase();
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => h.includes(w));
+};
+
 const fmtDur = (ms) => {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
@@ -274,8 +280,8 @@ const tileHTML = (t) => `
 
 function renderTiles() {
   tileGrid.classList.toggle("editing", editingTiles);
-  const q = tileSearch.toLowerCase();
-  const visible = q ? tiles.filter((t) => t.label.toLowerCase().includes(q)) : tiles;
+  const q = tileSearch;
+  const visible = q ? tiles.filter((t) => wordsMatch(q, `${t.label} ${t.section || ""}`)) : tiles;
   const sections = sectionOrder().filter((sec) =>
     visible.some((t) => (t.section || "Other") === sec)
   );
@@ -1024,10 +1030,8 @@ $("#search-input").addEventListener("input", (e) => {
 function entryMatches(e) {
   if (diaryFilter !== "all" && e.type !== diaryFilter) return false;
   if (!diarySearch) return true;
-  const hay = [e.title, e.detail, ...(e.transcript || []).map((s) => s.text)]
-    .join(" ")
-    .toLowerCase();
-  return hay.includes(diarySearch);
+  const hay = [e.title, e.detail, ...(e.transcript || []).map((s) => s.text)].join(" ");
+  return wordsMatch(diarySearch, hay);
 }
 
 async function renderDiary() {
