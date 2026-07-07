@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 24; // keep in step with the service worker cache version
+const APP_VERSION = 25; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -679,6 +679,51 @@ $("#note-log-btn").addEventListener("click", logNote);
 noteInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") logNote();
 });
+
+// Full editor for longer notes (and editing an existing note's text).
+function openNoteEditor(entry) {
+  const isNew = !entry;
+  openSheet(`
+    <h3>${isNew ? "New note" : "Edit note"}</h3>
+    <div class="field">
+      <textarea id="note-editor" rows="8" maxlength="8000" placeholder="Write as much as you like…&#10;&#10;Dates, times, what was said, how it made you feel — it's all on the record.">${esc(entry?.title || "")}</textarea>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="cancel">Cancel</button>
+      <button class="btn primary" data-act="save">${isNew ? "Log it" : "Save"}</button>
+    </div>`);
+  const ta = $("#note-editor", sheetEl);
+  $('[data-act="cancel"]', sheetEl).onclick = closeSheet;
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const text = ta.value.trim();
+    if (!text) {
+      if (!isNew) closeSheet();
+      return;
+    }
+    if (isNew) {
+      const e = { id: uid(), type: "note", ts: Date.now(), title: text, emoji: "✏️" };
+      await putEntry(e);
+      closeSheet();
+      toast(tadaLine(e.ts), {
+        undo: async () => {
+          await deleteEntry(e.id);
+          renderTodayStrip();
+          renderDiary();
+          toast("Undone");
+        },
+      });
+      renderTodayStrip();
+    } else {
+      entry.title = text;
+      await putEntry(entry);
+      closeSheet();
+      toast("Note updated ✅");
+    }
+    renderDiary();
+  };
+  setTimeout(() => ta.focus(), 250);
+}
+$("#note-expand-btn").addEventListener("click", () => openNoteEditor(null));
 
 /* ---- photo evidence ---- */
 let photoTargetEntryId = null; // entry to attach to; null = new photo entry
@@ -1783,11 +1828,17 @@ function renderEntry(e) {
     extra = `<div class="e-transcript"><p class="tr-line" style="color:var(--faint)">No transcript captured — tap for details</p></div>` + extra;
   }
 
+  // Long / multi-line notes render as flowing body text, not a bold heading.
+  const longNote = e.type === "note" && (e.title.length > 80 || e.title.includes("\n"));
+  const titleHtml = longNote
+    ? `<p class="e-note-body">${esc(e.title)}</p>`
+    : `<p class="e-title">${esc(e.title)}</p>`;
+
   return `
   <div class="entry type-${e.type}" data-entry="${e.id}">
     <div class="e-icon">${icon}</div>
     <div class="e-body">
-      <p class="e-title">${esc(e.title)}</p>
+      ${titleHtml}
       <span class="e-time">${fmtTime(e.ts)}${e.durationMs ? ` · ${fmtDur(e.durationMs)}` : ""}${e.type === "voice" ? ` · transcript ›` : ""}</span>
       ${extra}
     </div>
@@ -1851,10 +1902,17 @@ async function openEntryMenu(id) {
     <h3>${esc(e.title)}</h3>
     <p class="sheet-note">${fmtFullDate(e.ts)} at ${fmtTime(e.ts)}</p>
     <div class="settings-card">
+      ${e.type === "note" ? `<button class="settings-row" data-act="edit"><span>✏️ Edit / add to note</span><span class="chev">›</span></button>` : ""}
       <button class="settings-row" data-act="photo"><span>📷 Add a photo</span><span class="chev">›</span></button>
       <button class="settings-row" data-act="share"><span>↗ Share this entry</span><span class="chev">›</span></button>
       <button class="settings-row danger" data-act="delete"><span>🗑 Delete entry</span><span class="chev">›</span></button>
     </div>`);
+  if (e.type === "note") {
+    $('[data-act="edit"]', sheetEl).onclick = () => {
+      closeSheet();
+      openNoteEditor(e);
+    };
+  }
   $('[data-act="photo"]', sheetEl).onclick = () => {
     closeSheet();
     photoTargetEntryId = e.id;

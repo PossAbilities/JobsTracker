@@ -239,6 +239,27 @@ input, textarea { -webkit-user-select: text; user-select: text; }
   border: 1px solid var(--line);
   font-size: 21px;
 }
+.note-expand {
+  margin: 10px 0 0;
+  background: none;
+  border: none;
+  color: var(--amber);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.e-note-body {
+  margin: 0 0 2px;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 /* ---------- photos ---------- */
 .e-photos {
