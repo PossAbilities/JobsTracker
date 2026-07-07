@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 25; // keep in step with the service worker cache version
+const APP_VERSION = 26; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -2067,6 +2067,94 @@ function startOfToday() {
   return d.getTime();
 }
 
+const escRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const entryText = (e) => [e.title, e.detail, ...(e.transcript || []).map((s) => s.text)].join(" ");
+const spotlightName = () => localStorage.getItem("tada-spotlight") || "Sam";
+
+// Build the person-spotlight card: every mention across tasks, notes and
+// voice transcripts, with trend, breakdown, co-occurring words and recents.
+function spotlightCard(all) {
+  const name = spotlightName();
+  const rx = new RegExp(`\\b${escRegex(name)}('s|s)?\\b`, "i");
+  const hits = all.filter((e) => rx.test(entryText(e)));
+  if (!hits.length) {
+    return `
+    <div class="stats-card spotlight">
+      <div class="sc-head"><h3>👤 ${esc(name)} · spotlight</h3><button class="day-share" id="spot-edit">Change name</button></div>
+      <p class="sc-facts">No mentions of <strong>${esc(name)}</strong> yet. Anything you log that names ${esc(name)} — a task, a note, or a recorded conversation — shows up here.</p>
+    </div>`;
+  }
+
+  const byType = { task: 0, note: 0, voice: 0 };
+  for (const e of hits) byType[e.type] = (byType[e.type] || 0) + 1;
+  const firstTs = hits[0].ts;
+  const lastTs = hits[hits.length - 1].ts;
+
+  // this week vs last
+  const endTonight = startOfToday() + DAY_MS;
+  const wThis = hits.filter((e) => e.ts >= endTonight - 7 * DAY_MS).length;
+  const wLast = hits.filter((e) => e.ts >= endTonight - 14 * DAY_MS && e.ts < endTonight - 7 * DAY_MS).length;
+  const wDelta = wThis - wLast;
+
+  // busiest day
+  const perDay = new Map();
+  for (const e of hits) perDay.set(dayKey(e.ts), (perDay.get(dayKey(e.ts)) || 0) + 1);
+  let busyKey = null, busyN = 0;
+  for (const [k, n] of perDay) if (n > busyN) { busyKey = k; busyN = n; }
+
+  // words that keep cropping up around the name
+  const stop = new Set([...STOPWORDS, name.toLowerCase(), name.toLowerCase() + "s", name.toLowerCase() + "'s"]);
+  const co = new Map();
+  for (const e of hits) for (const w of new Set(words(entryText(e)))) if (!stop.has(w)) co.set(w, (co.get(w) || 0) + 1);
+  const topCo = [...co.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // "things you do around Sam" — most repeated task/note titles mentioning her
+  const titleCount = new Map();
+  for (const e of hits) {
+    if (!rx.test(e.title || "")) continue;
+    const key = e.title.toLowerCase();
+    const rec = titleCount.get(key) || { title: e.title, n: 0 };
+    rec.n++;
+    titleCount.set(key, rec);
+  }
+  const topTitles = [...titleCount.values()].filter((t) => t.n >= 2).sort((a, b) => b.n - a.n).slice(0, 4);
+  const maxT = topTitles[0]?.n || 1;
+
+  const recents = hits.slice(-3).reverse();
+
+  return `
+    <div class="stats-card spotlight">
+      <div class="sc-head"><h3>👤 ${esc(name)} · spotlight</h3><button class="day-share" id="spot-edit">Change name</button></div>
+      <p class="sc-big">${hits.length}<span class="sc-unit"> mention${hits.length === 1 ? "" : "s"} on the record</span></p>
+      <p class="sc-facts">
+        ${[byType.task && `✓ ${byType.task} task${byType.task === 1 ? "" : "s"}`, byType.voice && `🎙 ${byType.voice} recording${byType.voice === 1 ? "" : "s"}`, byType.note && `✏️ ${byType.note} note${byType.note === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}
+      </p>
+      <div class="sc-sections">
+        <div class="sec-line"><span>This week</span><strong>${wThis}${wLast ? ` (${wDelta >= 0 ? "▲" : "▼"}${Math.abs(wDelta)} vs last)` : ""}</strong></div>
+        <div class="sec-line"><span>First mention</span><strong>${fmtLongDate(firstTs)}</strong></div>
+        <div class="sec-line"><span>Most recent</span><strong>${fmtLongDate(lastTs)}</strong></div>
+        ${busyKey ? `<div class="sec-line"><span>Busiest day</span><strong>${busyN}× on ${fmtLongDate(hits.find((e) => dayKey(e.ts) === busyKey).ts)}</strong></div>` : ""}
+      </div>
+      ${topTitles.length ? `
+        <p class="section-hint" style="margin:14px 2px 8px">What ${esc(name)} has you doing</p>
+        ${topTitles.map((t) => `
+          <div class="hbar-row">
+            <span class="hb-label">${esc(t.title)}</span>
+            <div class="hb-track"><div class="hb-fill" style="width:${Math.max(6, (t.n / maxT) * 100)}%"></div></div>
+            <span class="hb-count">${t.n}</span>
+          </div>`).join("")}` : ""}
+      ${topCo.length ? `
+        <p class="section-hint" style="margin:14px 2px 8px">Words that come up around ${esc(name)}</p>
+        <div class="kw-cloud">${topCo.map(([w, n]) => `<span class="kw-chip">${esc(w)} <strong>×${n}</strong></span>`).join("")}</div>` : ""}
+      <p class="section-hint" style="margin:14px 2px 8px">Recent mentions</p>
+      ${recents.map((e) => `
+        <div class="spot-recent">
+          <span class="sr-icon">${e.type === "voice" ? "🎙" : e.type === "task" ? "✓" : "✏️"}</span>
+          <div><p>${esc(e.title.length > 90 ? e.title.slice(0, 90) + "…" : e.title)}</p><span>${fmtLongDate(e.ts)} · ${fmtTime(e.ts)}</span></div>
+        </div>`).join("")}
+    </div>`;
+}
+
 async function renderStats() {
   const all = (await getAllEntries()).sort((a, b) => a.ts - b.ts);
   const el = $("#stats-content");
@@ -2207,7 +2295,29 @@ async function renderStats() {
     </div>`
     : "";
 
-  el.innerHTML = summaryCard + tilesRow + trendCard + topCard + kwCard;
+  el.innerHTML = summaryCard + tilesRow + spotlightCard(all) + trendCard + topCard + kwCard;
+
+  $("#spot-edit")?.addEventListener("click", () => {
+    openSheet(`
+      <h3>Spotlight person</h3>
+      <p class="sheet-note">Track every mention of one person across your tasks, notes and recordings.</p>
+      <div class="field">
+        <label>Name to track</label>
+        <input id="spot-name" type="text" maxlength="24" value="${esc(spotlightName())}" placeholder="e.g. Sam">
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" data-act="cancel">Cancel</button>
+        <button class="btn primary" data-act="save">Save</button>
+      </div>`);
+    $('[data-act="cancel"]', sheetEl).onclick = closeSheet;
+    $('[data-act="save"]', sheetEl).onclick = () => {
+      const v = $("#spot-name", sheetEl).value.trim();
+      if (v) localStorage.setItem("tada-spotlight", v);
+      closeSheet();
+      renderStats();
+    };
+    setTimeout(() => $("#spot-name", sheetEl)?.focus(), 250);
+  });
 
   $("#share-summary")?.addEventListener("click", () => shareDaySummary(dayStart, dayEntries, sectionRows, typeBits));
   $$(".trend-chart [data-i]", el).forEach((bar) =>
