@@ -648,6 +648,27 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 .tr-edit-line .tr-time { margin-left: 8px; }
 
+/* collapse a long transcript to the first ~6 lines */
+.tr-lines.collapsed {
+  max-height: 340px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
+}
+#tr-collapse-btn { margin-top: 4px; }
+
+/* "Set everyone to:" quick bulk-assign row */
+.tr-setall {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tr-setall .speaker-chip { padding: 6px 13px; font-size: 13px; }
+
 /* speaker picker popover */
 #speaker-pop {
   position: fixed;

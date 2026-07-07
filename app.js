@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 23; // keep in step with the service worker cache version
+const APP_VERSION = 24; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -716,36 +716,44 @@ $("#photo-btn").addEventListener("click", () => {
 });
 
 $("#photo-input").addEventListener("change", async (ev) => {
-  const file = ev.target.files[0];
+  const files = [...ev.target.files];
   ev.target.value = "";
   const target = photoTargetEntryId;
   photoTargetEntryId = null;
-  if (!file) return;
-  const blob = await shrinkImage(file);
-  const photoId = uid();
-  await putPhoto({ id: photoId, blob });
+  if (!files.length) return;
+  if (files.length > 1) toast(`Adding ${files.length} photos…`);
+  const photoIds = [];
+  for (const file of files) {
+    const blob = await shrinkImage(file);
+    const photoId = uid();
+    await putPhoto({ id: photoId, blob });
+    photoIds.push(photoId);
+  }
   if (target) {
     const all = await getAllEntries();
     const e = all.find((x) => x.id === target);
     if (!e) {
-      await deletePhoto(photoId);
+      for (const id of photoIds) await deletePhoto(id);
       return;
     }
-    e.photoIds = [...(e.photoIds || []), photoId];
+    e.photoIds = [...(e.photoIds || []), ...photoIds];
     await putEntry(e);
     renderDiary();
-    toast("Photo attached 📷");
+    toast(photoIds.length === 1 ? "Photo attached 📷" : `${photoIds.length} photos attached 📷`);
   } else {
-    openPhotoCaptionSheet(photoId);
+    openPhotoCaptionSheet(photoIds);
   }
 });
 
-async function openPhotoCaptionSheet(photoId) {
-  const url = await photoURL(photoId);
+async function openPhotoCaptionSheet(photoIds) {
+  const urls = await Promise.all(photoIds.map(photoURL));
+  const thumbs = urls
+    .map((u) => `<img src="${u}" alt="Photo" style="width:74px;height:74px;object-fit:cover;border-radius:12px;background:var(--surface-2)">`)
+    .join("");
   openSheet(`
-    <h3>Photo evidence</h3>
-    <img src="${url}" alt="Photo" style="width:100%;max-height:40vh;object-fit:contain;border-radius:14px;background:var(--surface-2)">
-    <div class="field" style="margin-top:14px">
+    <h3>Photo evidence${photoIds.length > 1 ? ` · ${photoIds.length}` : ""}</h3>
+    <div class="e-photos" style="margin-bottom:6px">${thumbs}</div>
+    <div class="field" style="margin-top:8px">
       <label>What's this evidence of?</label>
       <input id="photo-caption" type="text" maxlength="80" placeholder="e.g. Cushions, officially away">
     </div>
@@ -754,7 +762,7 @@ async function openPhotoCaptionSheet(photoId) {
       <button class="btn primary" data-act="save">Save to diary</button>
     </div>`);
   $('[data-act="cancel"]', sheetEl).onclick = async () => {
-    await deletePhoto(photoId);
+    for (const id of photoIds) await deletePhoto(id);
     closeSheet();
   };
   $('[data-act="save"]', sheetEl).onclick = async () => {
@@ -763,9 +771,9 @@ async function openPhotoCaptionSheet(photoId) {
       id: uid(),
       type: "note",
       ts: Date.now(),
-      title: caption || "Photo evidence",
+      title: caption || (photoIds.length > 1 ? `Photo evidence (${photoIds.length})` : "Photo evidence"),
       emoji: "📷",
-      photoIds: [photoId],
+      photoIds,
     };
     await putEntry(entry);
     closeSheet();
@@ -1535,8 +1543,11 @@ async function renderDiary() {
     b.addEventListener("click", () => openEntryMenu(b.dataset.id))
   );
   $$(".tr-more", timeline).forEach((b) =>
-    b.addEventListener("click", () => {
-      expandedTranscripts.add(b.dataset.id);
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const id = b.dataset.id;
+      if (expandedTranscripts.has(id)) expandedTranscripts.delete(id);
+      else expandedTranscripts.add(id);
       renderDiary();
     })
   );
@@ -1623,16 +1634,27 @@ async function openVoiceDetail(id) {
   const e = all.find((x) => x.id === id);
   if (!e) return;
 
-  const lines = (e.transcript || [])
+  const segs = e.transcript || [];
+  const longTr = segs.length > 6;
+  const lines = segs
     .map(
       (s, i) => `
     <div class="tr-edit-line">
       <button class="tr-speaker-btn" data-i="${i}" style="color:${speakerColour(s.speakerId)}">${esc(speakerName(s.speakerId))} ▾</button>
-      <span class="tr-time">${fmtClock(s.t)}</span>
+      ${s.t != null ? `<span class="tr-time">${fmtClock(s.t)}</span>` : ""}
       <p>${esc(s.text)}</p>
     </div>`
     )
     .join("");
+
+  // "Set everyone to X" — a fast way to bulk-assign, since the phone can't
+  // tell voices apart automatically. Set all, then fix the exceptions.
+  const setAll = segs.length > 1
+    ? `<div class="tr-setall">
+        <span>Set everyone to:</span>
+        ${speakers.map((s) => `<button class="speaker-chip" data-setall="${s.id}" style="border-color:${speakerColour(s.id)}">${esc(s.name)}</button>`).join("")}
+      </div>`
+    : "";
 
   openSheet(`
     <h3>${esc(e.title)}</h3>
@@ -1644,7 +1666,9 @@ async function openVoiceDetail(id) {
       <span class="ap-time">${fmtDur(e.durationMs || 0)}</span>
     </div>` : ""}
     ${lines
-      ? `<p class="sheet-note">Tap a name to change who said it.</p>${lines}`
+      ? `<p class="sheet-note">Tap a name to change who said it.</p>${setAll}
+         <div class="tr-lines ${longTr ? "collapsed" : ""}" id="tr-lines">${lines}</div>
+         ${longTr ? `<button class="tr-more" id="tr-collapse-btn">Show all ${segs.length} lines ▾</button>` : ""}`
       : `<p class="sheet-note">No transcript yet. Your iPhone can make one for free — see below.</p>`}
     <div class="field" style="margin-top:12px">
       <label>${lines ? "Replace transcript (paste new)" : "📝 Paste a transcript"}</label>
@@ -1663,17 +1687,43 @@ async function openVoiceDetail(id) {
   const playBtn = $(".ap-play", sheetEl);
   if (playBtn) playBtn.addEventListener("click", () => togglePlay(e.audioId, playBtn));
 
+  const refreshLinePill = (i) => {
+    const btn = $(`.tr-speaker-btn[data-i="${i}"]`, sheetEl);
+    if (!btn) return;
+    const sid = e.transcript[i].speakerId;
+    btn.style.color = speakerColour(sid);
+    btn.textContent = `${speakerName(sid)} ▾`;
+  };
+
   $$(".tr-speaker-btn", sheetEl).forEach((btn) =>
     btn.addEventListener("click", () => {
-      const seg = e.transcript[Number(btn.dataset.i)];
-      openSpeakerPicker(btn, seg.speakerId, async (id) => {
-        seg.speakerId = id;
-        btn.style.color = speakerColour(id);
-        btn.textContent = `${speakerName(id)} ▾`;
+      const i = Number(btn.dataset.i);
+      openSpeakerPicker(btn, e.transcript[i].speakerId, async (id) => {
+        e.transcript[i].speakerId = id;
+        refreshLinePill(i);
         await putEntry(e);
       });
     })
   );
+
+  $$("[data-setall]", sheetEl).forEach((chip) =>
+    chip.addEventListener("click", async () => {
+      const id = chip.dataset.setall;
+      e.transcript.forEach((s) => (s.speakerId = id));
+      e.transcript.forEach((_, i) => refreshLinePill(i));
+      await putEntry(e);
+      toast(`All lines set to ${speakerName(id)} — tap any to change`);
+    })
+  );
+
+  const collapseBtn = $("#tr-collapse-btn", sheetEl);
+  if (collapseBtn) {
+    collapseBtn.addEventListener("click", () => {
+      const box = $("#tr-lines", sheetEl);
+      const collapsed = box.classList.toggle("collapsed");
+      collapseBtn.textContent = collapsed ? `Show all ${e.transcript.length} lines ▾` : "Show less ▲";
+    });
+  }
 
   $('[data-act="close"]', sheetEl).onclick = () => {
     closeSheet();
@@ -1701,17 +1751,18 @@ function renderEntry(e) {
   if (e.transcript?.length) {
     const expanded = expandedTranscripts.has(e.id);
     const shown = expanded ? e.transcript : e.transcript.slice(0, 3);
+    const long = e.transcript.length > 3;
     extra += `<div class="e-transcript">
       ${shown
         .map(
           (s) => `<p class="tr-line">
           <span class="tr-speaker" style="color:${speakerColour(s.speakerId)}">${esc(speakerName(s.speakerId))}</span>
-          <span class="tr-time">${fmtClock(s.t)}</span><br>${esc(s.text)}
+          ${s.t != null ? `<span class="tr-time">${fmtClock(s.t)}</span>` : ""}<br>${esc(s.text)}
         </p>`
         )
         .join("")}
-      ${!expanded && e.transcript.length > 3
-        ? `<button class="tr-more" data-id="${e.id}">Show all ${e.transcript.length} lines ▾</button>`
+      ${long
+        ? `<button class="tr-more" data-id="${e.id}">${expanded ? "Show less ▲" : `Show all ${e.transcript.length} lines ▾`}</button>`
         : ""}
     </div>`;
   }
