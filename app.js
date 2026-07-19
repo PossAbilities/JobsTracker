@@ -4,7 +4,7 @@
    ============================================================ */
 "use strict";
 
-const APP_VERSION = 26; // keep in step with the service worker cache version
+const APP_VERSION = 27; // keep in step with the service worker cache version
 
 /* ---------------- tiny helpers ---------------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1903,6 +1903,7 @@ async function openEntryMenu(id) {
     <p class="sheet-note">${fmtFullDate(e.ts)} at ${fmtTime(e.ts)}</p>
     <div class="settings-card">
       ${e.type === "note" ? `<button class="settings-row" data-act="edit"><span>✏️ Edit / add to note</span><span class="chev">›</span></button>` : ""}
+      <button class="settings-row" data-act="time"><span>🕐 Edit date &amp; time</span><span class="chev">›</span></button>
       <button class="settings-row" data-act="photo"><span>📷 Add a photo</span><span class="chev">›</span></button>
       <button class="settings-row" data-act="share"><span>↗ Share this entry</span><span class="chev">›</span></button>
       <button class="settings-row danger" data-act="delete"><span>🗑 Delete entry</span><span class="chev">›</span></button>
@@ -1913,6 +1914,10 @@ async function openEntryMenu(id) {
       openNoteEditor(e);
     };
   }
+  $('[data-act="time"]', sheetEl).onclick = () => {
+    closeSheet();
+    openTimeEditor(e);
+  };
   $('[data-act="photo"]', sheetEl).onclick = () => {
     closeSheet();
     photoTargetEntryId = e.id;
@@ -1935,6 +1940,42 @@ async function openEntryMenu(id) {
       renderTodayStrip();
       toast("Entry deleted");
     });
+  };
+}
+
+// ts <-> the value format an <input type="datetime-local"> expects (local time).
+function tsToLocalInput(ts) {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function openTimeEditor(e) {
+  openSheet(`
+    <h3>Edit date &amp; time</h3>
+    <p class="sheet-note">When did this actually happen? The diary and stats will re-sort to match.</p>
+    <div class="field">
+      <label>Date &amp; time</label>
+      <input id="time-input" type="datetime-local" value="${tsToLocalInput(e.ts)}">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" data-act="cancel">Cancel</button>
+      <button class="btn primary" data-act="save">Save</button>
+    </div>`);
+  $('[data-act="cancel"]', sheetEl).onclick = closeSheet;
+  $('[data-act="save"]', sheetEl).onclick = async () => {
+    const val = $("#time-input", sheetEl).value;
+    const t = val ? new Date(val).getTime() : NaN;
+    if (!isFinite(t)) {
+      toast("That date doesn't look right");
+      return;
+    }
+    e.ts = t;
+    await putEntry(e);
+    closeSheet();
+    renderDiary();
+    renderTodayStrip();
+    toast(`Moved to ${fmtLongDate(t)}, ${fmtTime(t)} 🕐`);
   };
 }
 
